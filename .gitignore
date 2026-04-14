@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build outputs (run `npm run build` in app/)
+app/dist-electron/
+app/dist-renderer/
+
+# Electron packager / builder output
+app/release/
+
+# OS & editor
+.DS_Store
+.idea/
+.vscode/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+npm-debug.log*
+*.log

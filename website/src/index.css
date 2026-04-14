@@ -1,0 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-[#0d1117] text-slate-200 font-sans antialiased;
+  }
+  ::selection {
+    @apply bg-indigo-500/30 text-white;
+  }
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-600 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-500;
+  }
+}
+
+@layer components {
+  .terminal-block {
+    @apply bg-[#0d1117] border border-[#21262d] rounded-lg font-mono text-sm text-green-400 overflow-x-auto;
+  }
+  .skill-card {
+    @apply bg-[#161b22] border border-[#21262d] rounded-xl p-5 hover:border-indigo-500/40 hover:bg-[#1c2128] transition-all duration-200;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  .gradient-text {
+    @apply bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent;
+  }
+  .section-label {
+    @apply text-xs font-mono uppercase tracking-widest text-indigo-400 mb-3;
+  }
+}

@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-[#0d1117] text-slate-200 font-sans;
+    user-select: none;
+  }
+}
+
+@layer components {
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-[#21262d] transition-colors text-sm font-medium cursor-pointer;
+  }
+  .sidebar-link.active {
+    @apply text-indigo-300 bg-indigo-500/10;
+  }
+  .btn-primary {
+    @apply px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-ghost {
+    @apply px-3 py-1.5 text-slate-400 hover:text-slate-200 hover:bg-[#21262d] rounded-lg text-sm transition-colors;
+  }
+  .input-base {
+    @apply w-full bg-[#161b22] border border-[#21262d] rounded-lg px-3 py-2 text-slate-200 text-sm placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors;
+  }
+  .card {
+    @apply bg-[#161b22] border border-[#21262d] rounded-xl;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: #30363d transparent;
+  }
+}
+
+/* Titlebar drag region */
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Markdown content */
+.prose-kb p { @apply mb-3 leading-relaxed; }
+.prose-kb h1, .prose-kb h2, .prose-kb h3 { @apply font-semibold text-slate-100 mb-2 mt-4; }
+.prose-kb h1 { @apply text-xl; }
+.prose-kb h2 { @apply text-lg; }
+.prose-kb h3 { @apply text-base; }
+.prose-kb code { @apply bg-[#21262d] text-indigo-300 px-1.5 py-0.5 rounded text-sm font-mono; }
+.prose-kb pre { @apply bg-[#161b22] border border-[#21262d] rounded-lg p-4 overflow-x-auto mb-3; }
+.prose-kb pre code { @apply bg-transparent p-0; }
+.prose-kb ul { @apply list-disc list-inside mb-3 space-y-1; }
+.prose-kb ol { @apply list-decimal list-inside mb-3 space-y-1; }
+.prose-kb blockquote { @apply border-l-2 border-indigo-500 pl-4 text-slate-400 italic mb-3; }
+.prose-kb a { @apply text-indigo-400 hover:text-indigo-300 underline; }
+.prose-kb strong { @apply text-slate-100 font-semibold; }
+
+/* Document viewer — large markdown rendering */
+.prose-doc { @apply text-slate-300 text-sm leading-relaxed; user-select: text; }
+.prose-doc p { @apply mb-4 leading-7; }
+.prose-doc h1 { @apply text-2xl font-bold text-slate-100 mb-3 mt-7 pb-2 border-b border-white/[0.08]; }
+.prose-doc h2 { @apply text-xl font-semibold text-slate-100 mb-3 mt-6 pb-1.5 border-b border-white/[0.06]; }
+.prose-doc h3 { @apply text-base font-semibold text-slate-200 mb-2 mt-5; }
+.prose-doc h4, .prose-doc h5, .prose-doc h6 { @apply font-semibold text-slate-300 mb-2 mt-4; }
+.prose-doc code { @apply bg-[#1e2533] text-amber-300/90 px-1.5 py-0.5 rounded text-[13px] font-mono; }
+.prose-doc pre { @apply bg-[#131824] border border-white/[0.08] rounded-xl p-5 overflow-x-auto mb-4 text-[13px]; }
+.prose-doc pre code { @apply bg-transparent p-0 text-slate-300; }
+.prose-doc ul { @apply list-disc pl-5 mb-4 space-y-1.5; }
+.prose-doc ol { @apply list-decimal pl-5 mb-4 space-y-1.5; }
+.prose-doc li { @apply leading-relaxed; }
+.prose-doc blockquote { @apply border-l-[3px] border-amber-400/50 pl-4 text-slate-400 italic mb-4 py-0.5; }
+.prose-doc a { @apply text-amber-400/90 hover:text-amber-300 underline; }
+.prose-doc strong { @apply text-slate-100 font-semibold; }
+.prose-doc em { @apply italic text-slate-300; }
+.prose-doc hr { @apply border-white/[0.08] my-6; }
+.prose-doc table { @apply w-full mb-4 text-sm border-collapse; }
+.prose-doc th { @apply text-left py-2 px-3 text-slate-300 font-semibold border-b border-white/[0.12] bg-white/[0.03]; }
+.prose-doc td { @apply py-2 px-3 border-b border-white/[0.06] text-slate-400; }
+.prose-doc tr:last-child td { @apply border-b-0; }
+.prose-doc img { @apply rounded-lg max-w-full my-4; }
+
+/* Blink cursor */
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+.cursor-blink { animation: blink 1s step-end infinite; }

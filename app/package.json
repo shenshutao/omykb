@@ -1,0 +1,78 @@
+{
+  "name": "omykb",
+  "version": "1.0.0",
+  "author": "zoro",
+  "description": "OMYKB — local Mac knowledge base app",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "build": "node build.cjs",
+    "start": "node build.cjs && electron .",
+    "dev": "node build.cjs && electron .",
+    "dist": "npm run build && electron-builder --mac dmg zip",
+    "pack": "npm run build && electron-builder --dir",
+    "dist:signed": "npm run build && electron-builder --mac dmg zip"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.37.0",
+    "@types/marked": "^5.0.2",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.0",
+    "marked": "^18.0.0",
+    "openai": "^6.34.0",
+    "pdf-parse": "^2.4.5",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@electron/notarize": "^3.1.1",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^8.2.2",
+    "electron": "^31.0.0",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.23.0",
+    "postcss": "^8.4.41",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.10"
+  },
+  "build": {
+    "appId": "dev.omykb.desktop",
+    "productName": "OMYKB",
+    "icon": "assets/icon.icns",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "dist-renderer/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../skills",
+        "to": "skills",
+        "filter": [
+          "*.md"
+        ]
+      }
+    ],
+    "asar": true,
+    "afterSign": "scripts/notarize.js",
+    "mac": {
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "dmg": {}
+  }
+}
