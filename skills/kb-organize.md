@@ -3,7 +3,7 @@ name: kb-organize
 description: AI-powered knowledge base curator — auto-tag, restructure, merge duplicates, and improve metadata
 ---
 
-Run the omykb AI curator to organize, clean up, and improve the structure of your knowledge base. Inspired by the "知识库管家" pattern.
+Run the OMYKB AI curator to organize, clean up, and improve the structure of your knowledge base. Inspired by the "知识库管家" pattern.
 
 ## Usage
 
@@ -30,7 +30,7 @@ Run the omykb AI curator to organize, clean up, and improve the structure of you
 
 4. **Generate reorganization plan**:
    ```
-   omykb> Curator Analysis
+   OMYKB> Curator Analysis
    
    📊 KB Stats: <n> docs · <n> topics detected · <n> issues found
    

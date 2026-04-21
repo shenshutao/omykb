@@ -3,7 +3,7 @@ name: kb-ask
 description: Ask a question and get an AI-synthesized answer with citations from your knowledge base
 ---
 
-Answer a question using content from the omykb knowledge base. Like NotebookLM, every answer is grounded in your KB documents with explicit citations.
+Answer a question using content from the OMYKB knowledge base. Like NotebookLM, every answer is grounded in your KB documents with explicit citations.
 
 ## Usage
 

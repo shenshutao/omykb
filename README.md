@@ -1,4 +1,4 @@
-# omykb — Open My Knowledge Base
+# OMYKB — Open My Knowledge Base
 
 Local-first AI knowledge base with two faces:
 
@@ -113,6 +113,23 @@ Supported local file formats currently include:
 - `md` / `txt`
 - `ipynb`
 - common image formats
+- audio: `mp3`, `wav`, `m4a`, `aac`, `flac`, `ogg`, `opus`
+- video: `mp4`, `mov`, `m4v`, `mkv`, `webm`, `avi`
+
+Audio/video transcription is configurable in Settings:
+
+- Chat model
+- Ingestion agent model
+- Markdown curation model
+- Vision model
+- ASR provider/model
+
+Supported ASR providers:
+
+- OpenAI-compatible transcription, default `whisper-1`, for local audio and video files.
+- Aliyun DashScope Paraformer, default `paraformer-v2`, for HTTP/HTTPS audio/video URLs.
+
+Aliyun recorded-file recognition does not accept local file uploads directly; the media must be reachable through a URL. Video local-file transcription with OpenAI requires `ffmpeg` to extract audio first. If requirements are missing, the app still imports a source note with clear warnings.
 
 Ingestion flow:
 

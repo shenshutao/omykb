@@ -14,7 +14,7 @@ export default function HomePage() {
             <span className="gradient-text">in your terminal</span>
           </h1>
           <p className="text-lg text-slate-400 leading-relaxed mb-8 max-w-2xl">
-            omykb is an open-source personal and team knowledge base tool.
+            OMYKB is an open-source personal and team knowledge base tool.
             Ingest any content, ask questions with citations, and organize knowledge automatically —
             all via Claude Code skills. Configurable storage: local, S3, or Git.
           </p>
@@ -94,7 +94,7 @@ export default function HomePage() {
       {/* Features */}
       <section className="border-t border-[#21262d] py-20">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
-          <div className="section-label text-center">why omykb</div>
+          <div className="section-label text-center">why OMYKB</div>
           <h2 className="text-2xl font-bold text-white text-center mb-12">
             Works where you work
           </h2>

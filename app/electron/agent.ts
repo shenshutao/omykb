@@ -19,11 +19,25 @@ export interface KBConfig {
   storagePath: string
   systemPrompt?: string
   baseURL?: string  // for OpenAI-compatible endpoints
+  chatModel?: string
+  ingestionModel?: string
+  curationModel?: string
+  visionModel?: string
+  asrProvider?: 'openai' | 'aliyun'
+  asrApiKey?: string
+  asrModel?: string
+  asrBaseURL?: string
+  setupCompleted?: boolean
 }
 
 export const DEFAULT_MODELS: Record<KBConfig['provider'], string> = {
   anthropic: 'claude-opus-4-6',
   openai: 'gpt-4o',
+}
+
+const DEFAULT_ASR_MODELS: Record<NonNullable<KBConfig['asrProvider']>, string> = {
+  openai: 'whisper-1',
+  aliyun: 'paraformer-v2',
 }
 
 export interface IngestSourcePayload {
@@ -237,6 +251,26 @@ const TOOL_SCHEMAS = {
       required: ['file_path'],
     },
   },
+  transcribe_audio: {
+    description: 'Transcribe a local audio file to text and return a normalized extracted-source object. Requires an OpenAI-compatible audio transcription API key.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        file_path: { type: 'string', description: 'Absolute path to the audio file (MP3, WAV, M4A, AAC, FLAC, OGG, OPUS, etc.)' },
+      },
+      required: ['file_path'],
+    },
+  },
+  transcribe_video: {
+    description: 'Extract audio from a local video file with ffmpeg, transcribe it, and return a normalized extracted-source object.',
+    parameters: {
+      type: 'object' as const,
+      properties: {
+        file_path: { type: 'string', description: 'Absolute path to the video file (MP4, MOV, M4V, MKV, WEBM, AVI, etc.)' },
+      },
+      required: ['file_path'],
+    },
+  },
   download_image: {
     description: 'Download an image from a URL to a temporary local file so it can be analyzed with describe_image. Returns the local file path.',
     parameters: {
@@ -297,6 +331,8 @@ const TEXT_EXTENSIONS = new Set([
 
 const SPREADSHEET_EXTENSIONS = new Set(['.xlsx', '.xls', '.csv'])
 const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff'])
+const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.m4a', '.aac', '.flac', '.ogg', '.oga', '.opus', '.webm'])
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.m4v', '.mkv', '.webm', '.avi', '.mpeg', '.mpg'])
 const BINARY_DOC_EXTENSIONS = new Set(['.pdf', '.docx', '.pptx', '.ipynb'])
 
 const SKIP_DIRS = new Set([
@@ -505,6 +541,72 @@ function getMimeTypeForImage(filePath: string): string {
   }
 }
 
+function getChatModel(cfg: KBConfig): string {
+  return cfg.chatModel || cfg.model || DEFAULT_MODELS[cfg.provider]
+}
+
+function getIngestionModel(cfg: KBConfig): string {
+  return cfg.ingestionModel || getChatModel(cfg)
+}
+
+function getCurationModel(cfg: KBConfig): string {
+  return cfg.curationModel || getChatModel(cfg)
+}
+
+function getVisionModel(cfg: KBConfig): string {
+  return cfg.visionModel || getChatModel(cfg)
+}
+
+function getAsrProvider(cfg?: KBConfig): NonNullable<KBConfig['asrProvider']> {
+  return cfg?.asrProvider || 'openai'
+}
+
+function getAsrApiKey(cfg?: KBConfig): string {
+  if (!cfg) return ''
+  return cfg.asrApiKey || (getAsrProvider(cfg) === 'openai' ? cfg.apiKey : '')
+}
+
+function getAsrModel(cfg?: KBConfig): string {
+  const provider = getAsrProvider(cfg)
+  return cfg?.asrModel || DEFAULT_ASR_MODELS[provider]
+}
+
+function getAsrBaseURL(cfg?: KBConfig): string {
+  const provider = getAsrProvider(cfg)
+  return cfg?.asrBaseURL || (provider === 'aliyun' ? 'https://dashscope.aliyuncs.com' : (cfg?.baseURL || ''))
+}
+
+function isHttpUrl(input: string): boolean {
+  return /^https?:\/\//i.test(input)
+}
+
+function extensionFromSource(source: string): string {
+  try {
+    return path.extname(isHttpUrl(source) ? new URL(source).pathname : source).toLowerCase()
+  } catch {
+    return path.extname(source).toLowerCase()
+  }
+}
+
+function getMediaDuration(filePath: string): string | undefined {
+  if (!commandExists('ffprobe')) return undefined
+  try {
+    const raw = execFileSync('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath,
+    ], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    const seconds = Number(raw)
+    if (!Number.isFinite(seconds)) return undefined
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.round(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  } catch {
+    return undefined
+  }
+}
+
 function buildExtractedResult(source: string, type: string, title: string, rawContent: string, extra?: Partial<ToolExtractedResult>): ToolExtractedResult {
   return {
     source,
@@ -676,7 +778,12 @@ async function crawlSite(url: string, maxPages = 10, maxDepth = 1): Promise<Tool
 
 function isTextLikeFile(filePath: string): boolean {
   const ext = fileExt(filePath)
-  return TEXT_EXTENSIONS.has(ext) || SPREADSHEET_EXTENSIONS.has(ext) || IMAGE_EXTENSIONS.has(ext) || BINARY_DOC_EXTENSIONS.has(ext)
+  return TEXT_EXTENSIONS.has(ext)
+    || SPREADSHEET_EXTENSIONS.has(ext)
+    || IMAGE_EXTENSIONS.has(ext)
+    || AUDIO_EXTENSIONS.has(ext)
+    || VIDEO_EXTENSIONS.has(ext)
+    || BINARY_DOC_EXTENSIONS.has(ext)
 }
 
 async function describeImageFile(filePath: string, cfg?: KBConfig): Promise<string> {
@@ -694,7 +801,7 @@ async function describeImageFile(filePath: string, cfg?: KBConfig): Promise<stri
       ...(cfg.baseURL ? { baseURL: cfg.baseURL } : {}),
     })
     const response = await client.chat.completions.create({
-      model: cfg.model,
+      model: getVisionModel(cfg),
       messages: [
         {
           role: 'user',
@@ -714,7 +821,7 @@ async function describeImageFile(filePath: string, cfg?: KBConfig): Promise<stri
 
   const client = new Anthropic({ apiKey: cfg.apiKey })
   const response = await client.messages.create({
-    model: cfg.model,
+    model: getVisionModel(cfg),
     max_tokens: 2000,
     messages: [{
       role: 'user',
@@ -910,7 +1017,7 @@ async function toolDescribeImage(filePath: string, hint: string | undefined, cfg
     if (cfg.provider === 'openai') {
       const client = new OpenAI({ apiKey: cfg.apiKey, ...(cfg.baseURL ? { baseURL: cfg.baseURL } : {}) })
       const response = await client.chat.completions.create({
-        model: cfg.model,
+        model: getVisionModel(cfg),
         messages: [
           { role: 'system', content: systemPrompt },
           {
@@ -929,7 +1036,7 @@ async function toolDescribeImage(filePath: string, hint: string | undefined, cfg
     } else {
       const client = new Anthropic({ apiKey: cfg.apiKey })
       const response = await client.messages.create({
-        model: cfg.model,
+        model: getVisionModel(cfg),
         max_tokens: 2048,
         system: systemPrompt,
         messages: [{
@@ -997,6 +1104,331 @@ function toolReadNotebook(filePath: string): string {
     if (!fs.existsSync(resolved)) return JSON.stringify({ error: `File not found: ${resolved}` })
     const text = parseNotebook(resolved)
     return JSON.stringify(buildExtractedResult(resolved, 'ipynb', path.basename(resolved, path.extname(resolved)), text))
+  } catch (e) {
+    return JSON.stringify({ error: e instanceof Error ? e.message : String(e) })
+  }
+}
+
+async function transcribeAudioFile(filePath: string, cfg?: KBConfig): Promise<ToolExtractedResult> {
+  const isRemote = isHttpUrl(filePath)
+  const resolved = isRemote ? filePath : path.resolve(filePath)
+  const titleSource = isRemote ? new URL(filePath).pathname : resolved
+  const title = path.basename(titleSource, path.extname(titleSource)) || 'Audio'
+  const duration = isRemote ? undefined : getMediaDuration(resolved)
+  const provider = getAsrProvider(cfg)
+  const asrApiKey = getAsrApiKey(cfg)
+
+  if (!isRemote && !fs.existsSync(resolved)) {
+    throw new Error(`File not found: ${resolved}`)
+  }
+
+  if (!asrApiKey) {
+    return buildExtractedResult(
+      resolved,
+      'audio',
+      title,
+      [
+        `# ${title}`,
+        '',
+        'Audio file imported, but no transcript was generated.',
+        '',
+        '## Source Notes',
+        '',
+        `- Source: ${resolved}`,
+        duration ? `- Duration: ${duration}` : undefined,
+        `- Configure ${provider === 'aliyun' ? 'a DashScope' : 'an OpenAI'} ASR API key to enable audio transcription.`,
+      ].filter(Boolean).join('\n'),
+      {
+        quality: 'poor',
+        warnings: [`Audio transcription requires ${provider === 'aliyun' ? 'DashScope' : 'OpenAI'} ASR configuration.`],
+      }
+    )
+  }
+
+  let transcript = ''
+  if (provider === 'aliyun') {
+    if (!isRemote) {
+      return buildExtractedResult(
+        resolved,
+        'audio',
+        title,
+        [
+          `# ${title}`,
+          '',
+          'Audio file imported, but Aliyun ASR was not run because DashScope recorded-file recognition requires an HTTP/HTTPS file URL.',
+          '',
+          '## Source Notes',
+          '',
+          `- Source: ${resolved}`,
+          '- Use a publicly reachable or signed OSS URL for Aliyun ASR, or switch ASR provider to OpenAI for local file transcription.',
+        ].join('\n'),
+        {
+          quality: 'poor',
+          warnings: ['Aliyun ASR requires file_urls over HTTP/HTTPS for recorded-file transcription.'],
+        }
+      )
+    }
+    transcript = await transcribeAliyunFileUrl(resolved, cfg!)
+  } else {
+    if (isRemote) {
+      return buildExtractedResult(
+        resolved,
+        'audio',
+        title,
+        [
+          `# ${title}`,
+          '',
+          'Audio URL imported, but OpenAI local-file transcription cannot read remote URLs directly.',
+          '',
+          '## Source Notes',
+          '',
+          `- Source: ${resolved}`,
+          '- Switch ASR provider to Aliyun for URL-based media transcription, or download the file and import it locally.',
+        ].join('\n'),
+        {
+          quality: 'poor',
+          warnings: ['OpenAI ASR path currently expects a local file.'],
+        }
+      )
+    }
+    const client = new OpenAI({
+      apiKey: asrApiKey,
+      ...(cfg?.baseURL ? { baseURL: cfg.baseURL } : {}),
+    })
+    const response = await client.audio.transcriptions.create({
+      file: fs.createReadStream(resolved),
+      model: getAsrModel(cfg),
+    })
+    transcript = normalizeWhitespace(response.text || '')
+  }
+  return buildExtractedResult(
+    resolved,
+    'audio',
+    title,
+    [
+      `# Transcript: ${title}`,
+      '',
+      duration ? `Duration: ${duration}` : undefined,
+      '',
+      '## Transcript',
+      '',
+      transcript || 'No speech was detected in this audio file.',
+    ].filter(Boolean).join('\n'),
+    {
+      quality: transcript.length < 200 ? 'fair' : 'good',
+      warnings: transcript ? [] : ['No speech was detected or transcription returned empty text.'],
+    }
+  )
+}
+
+function extractAudioFromVideo(filePath: string): string {
+  if (!commandExists('ffmpeg')) {
+    throw new Error('ffmpeg is required to extract audio from video files.')
+  }
+  const resolved = path.resolve(filePath)
+  const output = path.join(os.tmpdir(), `omykb-video-audio-${Date.now()}.mp3`)
+  execFileSync('ffmpeg', [
+    '-y',
+    '-i', resolved,
+    '-vn',
+    '-acodec', 'libmp3lame',
+    '-ar', '16000',
+    '-ac', '1',
+    output,
+  ], { stdio: 'ignore' })
+  return output
+}
+
+async function dashScopeJson(url: string, apiKey: string, init?: RequestInit): Promise<Record<string, unknown>> {
+  const response = await fetch(url, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      ...(init?.headers || {}),
+    },
+  })
+  const text = await response.text()
+  let parsed: Record<string, unknown> = {}
+  try { parsed = JSON.parse(text) as Record<string, unknown> } catch {}
+  if (!response.ok) {
+    const message = typeof parsed.message === 'string' ? parsed.message : text
+    throw new Error(`DashScope request failed (${response.status}): ${message}`)
+  }
+  return parsed
+}
+
+async function transcribeAliyunFileUrl(fileUrl: string, cfg: KBConfig): Promise<string> {
+  const baseURL = getAsrBaseURL(cfg).replace(/\/+$/, '')
+  const apiKey = getAsrApiKey(cfg)
+  const submit = await dashScopeJson(`${baseURL}/api/v1/services/audio/asr/transcription`, apiKey, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-DashScope-Async': 'enable',
+    },
+    body: JSON.stringify({
+      model: getAsrModel(cfg),
+      input: { file_urls: [fileUrl] },
+    }),
+  })
+  const output = submit.output as Record<string, unknown> | undefined
+  const taskId = typeof output?.task_id === 'string' ? output.task_id : ''
+  if (!taskId) throw new Error('DashScope ASR did not return task_id.')
+
+  let task: Record<string, unknown> | null = null
+  for (let attempt = 0; attempt < 45; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, attempt < 5 ? 1500 : 3000))
+    task = await dashScopeJson(`${baseURL}/api/v1/tasks/${taskId}`, apiKey, { method: 'POST' })
+    const taskOutput = task.output as Record<string, unknown> | undefined
+    const status = taskOutput?.task_status
+    if (status === 'SUCCEEDED') break
+    if (status === 'FAILED' || status === 'CANCELED') {
+      throw new Error(`DashScope ASR task ${status}: ${JSON.stringify(taskOutput)}`)
+    }
+  }
+
+  const taskOutput = task?.output as Record<string, unknown> | undefined
+  if (taskOutput?.task_status !== 'SUCCEEDED') {
+    throw new Error('DashScope ASR task did not finish before timeout.')
+  }
+  const results = Array.isArray(taskOutput.results) ? taskOutput.results as Array<Record<string, unknown>> : []
+  const first = results.find(result => result.subtask_status === 'SUCCEEDED') || results[0]
+  const transcriptUrl = typeof first?.transcription_url === 'string' ? first.transcription_url : ''
+  if (!transcriptUrl) throw new Error(`DashScope ASR result missing transcription_url: ${JSON.stringify(first)}`)
+
+  const transcriptResponse = await fetch(transcriptUrl)
+  if (!transcriptResponse.ok) throw new Error(`Failed to download DashScope transcript (${transcriptResponse.status}).`)
+  const transcriptJson = await transcriptResponse.json() as {
+    transcripts?: Array<{ text?: string; sentences?: Array<{ text?: string }> }>
+  }
+  const text = (transcriptJson.transcripts || [])
+    .map(item => item.text || (item.sentences || []).map(sentence => sentence.text || '').join('\n'))
+    .filter(Boolean)
+    .join('\n\n')
+  return normalizeWhitespace(text)
+}
+
+async function transcribeVideoFile(filePath: string, cfg?: KBConfig): Promise<ToolExtractedResult> {
+  const isRemote = isHttpUrl(filePath)
+  const resolved = isRemote ? filePath : path.resolve(filePath)
+  const titleSource = isRemote ? new URL(filePath).pathname : resolved
+  const title = path.basename(titleSource, path.extname(titleSource)) || 'Video'
+  const duration = isRemote ? undefined : getMediaDuration(resolved)
+  const provider = getAsrProvider(cfg)
+  const asrApiKey = getAsrApiKey(cfg)
+
+  if (!isRemote && !fs.existsSync(resolved)) {
+    throw new Error(`File not found: ${resolved}`)
+  }
+
+  if (provider === 'aliyun') {
+    if (!asrApiKey || !isRemote) {
+      return buildExtractedResult(
+        resolved,
+        'video',
+        title,
+        [
+          `# ${title}`,
+          '',
+          'Video file imported, but Aliyun ASR was not run.',
+          '',
+          '## Source Notes',
+          '',
+          `- Source: ${resolved}`,
+          !asrApiKey ? '- Missing requirement: DashScope ASR API key.' : undefined,
+          !isRemote ? '- Missing requirement: HTTP/HTTPS media URL. DashScope recorded-file recognition uses file_urls.' : undefined,
+        ].filter(Boolean).join('\n'),
+        {
+          quality: 'poor',
+          warnings: ['Aliyun video ASR requires a DashScope API key and an HTTP/HTTPS media URL.'],
+        }
+      )
+    }
+    const transcript = await transcribeAliyunFileUrl(resolved, cfg!)
+    return buildExtractedResult(
+      resolved,
+      'video',
+      title,
+      [
+        `# Transcript: ${title}`,
+        '',
+        '## Transcript',
+        '',
+        transcript || 'No speech was detected in this video file.',
+      ].join('\n'),
+      {
+        quality: transcript.length < 200 ? 'fair' : 'good',
+        warnings: transcript ? [] : ['No speech was detected or transcription returned empty text.'],
+      }
+    )
+  }
+
+  if (!asrApiKey || !commandExists('ffmpeg')) {
+    const missing = [
+      !asrApiKey ? 'OpenAI ASR API key' : '',
+      !commandExists('ffmpeg') ? 'ffmpeg' : '',
+    ].filter(Boolean).join(' and ')
+    return buildExtractedResult(
+      resolved,
+      'video',
+      title,
+      [
+        `# ${title}`,
+        '',
+        'Video file imported, but no transcript was generated.',
+        '',
+        '## Source Notes',
+        '',
+        `- Source: ${resolved}`,
+        duration ? `- Duration: ${duration}` : undefined,
+        `- Missing requirement: ${missing}.`,
+        '- Configure an OpenAI provider API key and install ffmpeg to enable video transcription.',
+      ].filter(Boolean).join('\n'),
+      {
+        quality: 'poor',
+        warnings: [`Video transcription requires ${missing}.`],
+      }
+    )
+  }
+
+  let audioPath = ''
+  try {
+    audioPath = extractAudioFromVideo(resolved)
+    const audioResult = await transcribeAudioFile(audioPath, cfg)
+    return buildExtractedResult(
+      resolved,
+      'video',
+      title,
+      [
+        `# Transcript: ${title}`,
+        '',
+        duration ? `Duration: ${duration}` : undefined,
+        '',
+        '## Transcript',
+        '',
+        audioResult.rawContent.replace(/^# Transcript: .+?\n\n/s, '').trim(),
+      ].filter(Boolean).join('\n'),
+      {
+        quality: audioResult.quality,
+        warnings: audioResult.warnings || [],
+      }
+    )
+  } finally {
+    if (audioPath) fs.rmSync(audioPath, { force: true })
+  }
+}
+
+async function toolTranscribeAudio(filePath: string, cfg?: KBConfig): Promise<string> {
+  try {
+    return JSON.stringify(await transcribeAudioFile(filePath, cfg))
+  } catch (e) {
+    return JSON.stringify({ error: e instanceof Error ? e.message : String(e) })
+  }
+}
+
+async function toolTranscribeVideo(filePath: string, cfg?: KBConfig): Promise<string> {
+  try {
+    return JSON.stringify(await transcribeVideoFile(filePath, cfg))
   } catch (e) {
     return JSON.stringify({ error: e instanceof Error ? e.message : String(e) })
   }
@@ -1109,6 +1541,12 @@ async function parseBinaryFile(filePath: string, cfg?: KBConfig): Promise<string
   if (IMAGE_EXTENSIONS.has(ext)) {
     return await describeImageFile(filePath, cfg)
   }
+  if (AUDIO_EXTENSIONS.has(ext)) {
+    return (await transcribeAudioFile(filePath, cfg)).rawContent
+  }
+  if (VIDEO_EXTENSIONS.has(ext)) {
+    return (await transcribeVideoFile(filePath, cfg)).rawContent
+  }
   return ''
 }
 
@@ -1156,6 +1594,16 @@ async function readLocalFileContent(filePath: string, cfg?: KBConfig): Promise<{
     }
     const content = await describeImageFile(resolved, cfg)
     return { title: path.basename(resolved, path.extname(resolved)), content, source: resolved, type: 'image' }
+  }
+  if (AUDIO_EXTENSIONS.has(ext)) {
+    const parsed = parseJsonObject<ToolExtractedResult>(await toolTranscribeAudio(resolved, cfg))
+    if (!parsed?.rawContent) throw new Error(`Failed to transcribe audio ${resolved}`)
+    return { title: parsed.title, content: parsed.rawContent, source: parsed.source, type: parsed.type }
+  }
+  if (VIDEO_EXTENSIONS.has(ext)) {
+    const parsed = parseJsonObject<ToolExtractedResult>(await toolTranscribeVideo(resolved, cfg))
+    if (!parsed?.rawContent) throw new Error(`Failed to transcribe video ${resolved}`)
+    return { title: parsed.title, content: parsed.rawContent, source: parsed.source, type: parsed.type }
   }
 
   const content = await parseBinaryFile(resolved, cfg)
@@ -1241,6 +1689,10 @@ function parserToolNameForType(type: string, source?: string): string {
       return 'read_notebook'
     case 'image':
       return 'describe_image'
+    case 'audio':
+      return 'transcribe_audio'
+    case 'video':
+      return 'transcribe_video'
     case 'web':
       return 'crawl_site'
     case 'url':
@@ -1267,7 +1719,12 @@ function buildFallbackToolTrace(payload: IngestSourcePayload, extracted: Extract
   if (payload.type === 'text') {
     trace.push({ name: 'inline_text', input: { title: payload.title || 'Text Note', preview: payload.content.slice(0, 120) } })
   } else if (payload.type === 'url') {
-    if (payload.options?.crawl) {
+    const ext = extensionFromSource(payload.content)
+    if (AUDIO_EXTENSIONS.has(ext)) {
+      trace.push({ name: 'transcribe_audio', input: { file_path: payload.content } })
+    } else if (VIDEO_EXTENSIONS.has(ext)) {
+      trace.push({ name: 'transcribe_video', input: { file_path: payload.content } })
+    } else if (payload.options?.crawl) {
       trace.push({
         name: 'crawl_site',
         input: {
@@ -1342,7 +1799,7 @@ async function generateCuratedMarkdown(
       ...(cfg.baseURL ? { baseURL: cfg.baseURL } : {}),
     })
     const response = await client.chat.completions.create({
-      model: cfg.model,
+      model: getCurationModel(cfg),
       temperature: 0.2,
       response_format: { type: 'json_object' },
       messages: [
@@ -1364,7 +1821,7 @@ async function generateCuratedMarkdown(
   } else {
     const client = new Anthropic({ apiKey: cfg.apiKey })
     const response = await client.messages.create({
-      model: cfg.model,
+      model: getCurationModel(cfg),
       max_tokens: 3000,
       system: 'You curate raw source material into structured Markdown knowledge notes. Return JSON only.',
       messages: [{ role: 'user', content: prompt }],
@@ -1491,6 +1948,26 @@ async function extractSourceForIngestion(payload: IngestSourcePayload, cfg?: KBC
     }
   }
 
+  const sourceExt = extensionFromSource(payload.content)
+  if (AUDIO_EXTENSIONS.has(sourceExt)) {
+    const audio = await transcribeAudioFile(payload.content, cfg)
+    return {
+      title: payload.title || audio.title,
+      rawContent: audio.rawContent,
+      source: audio.source,
+      type: audio.type,
+    }
+  }
+  if (VIDEO_EXTENSIONS.has(sourceExt)) {
+    const video = await transcribeVideoFile(payload.content, cfg)
+    return {
+      title: payload.title || video.title,
+      rawContent: video.rawContent,
+      source: video.source,
+      type: video.type,
+    }
+  }
+
   if (payload.options?.crawl) {
     const crawl = await crawlSite(payload.content, payload.options.maxPages || 10, payload.options.maxDepth || 1)
     return {
@@ -1567,7 +2044,7 @@ async function runIngestionLoop(
     ]
     for (let turn = 0; turn < 12; turn++) {
       const response = await client.chat.completions.create({
-        model: cfg.model,
+        model: getIngestionModel(cfg),
         messages,
         tools: OPENAI_TOOLS,
         tool_choice: 'auto',
@@ -1595,7 +2072,7 @@ async function runIngestionLoop(
     const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userMessage }]
     for (let turn = 0; turn < 12; turn++) {
       const response = await client.messages.create({
-        model: cfg.model,
+        model: getIngestionModel(cfg),
         max_tokens: 4096,
         system: systemPrompt,
         tools: ANTHROPIC_TOOLS,
@@ -1790,6 +2267,8 @@ async function executeTool(
     case 'read_notebook':     return toolReadNotebook(input.file_path as string)
     case 'pdf_to_image':      return toolPdfToImage(input.file_path as string)
     case 'describe_image':    return cfg ? await toolDescribeImage(input.file_path as string, input.hint as string | undefined, cfg) : JSON.stringify({ error: 'No config for vision model' })
+    case 'transcribe_audio':  return await toolTranscribeAudio(input.file_path as string, cfg)
+    case 'transcribe_video':  return await toolTranscribeVideo(input.file_path as string, cfg)
     case 'download_image':   return await toolDownloadImage(input.image_url as string, input.alt_text as string | undefined)
     default:                 return JSON.stringify({ error: `Unknown tool: ${name}` })
   }
@@ -1797,7 +2276,7 @@ async function executeTool(
 
 function buildSystemPrompt(cfg: KBConfig): string {
   return cfg.systemPrompt ||
-    `You are omykb, an AI-powered personal knowledge base assistant. You help users store, organize, search, and retrieve information from their knowledge base.
+    `You are OMYKB, an AI-powered personal knowledge base assistant. You help users store, organize, search, and retrieve information from their knowledge base.
 
 You have tools to list, read, search, write, fetch, crawl, and ingest documents in the user's knowledge base (stored at: ${cfg.storagePath}).
 
@@ -1814,7 +2293,7 @@ When the user asks to add, sync, import, crawl, fetch, or save external knowledg
 4. For repositories, use read_git_repository or ingest_source with source_type=git
 5. Confirm what was stored, including title and source
 6. Prefer format-specific parser tools for local files:
-   - read_pdf, read_docx, read_pptx, read_spreadsheet, read_notebook, extract_text_file, describe_image
+   - read_pdf, read_docx, read_pptx, read_spreadsheet, read_notebook, extract_text_file, describe_image, transcribe_audio, transcribe_video
 7. Treat read_local_file as a convenience router, not the preferred first choice when a specific parser fits
 
 Today's date: ${new Date().toLocaleDateString()}`
@@ -1832,7 +2311,7 @@ async function runAnthropicLoop(
 
   while (true) {
     const stream = client.messages.stream({
-      model: cfg.model,
+      model: getChatModel(cfg),
       max_tokens: 8096,
       thinking: { type: 'adaptive' },
       system: buildSystemPrompt(cfg),
@@ -1905,7 +2384,7 @@ async function runOpenAILoop(
 
   while (true) {
     const stream = await client.chat.completions.create({
-      model: cfg.model,
+      model: getChatModel(cfg),
       messages: currentMessages,
       tools: OPENAI_TOOLS,
       tool_choice: 'auto',

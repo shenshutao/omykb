@@ -3,7 +3,7 @@ name: kb-team
 description: Configure and manage team knowledge base sharing via Git or S3 — sync, merge, and collaborate
 ---
 
-Set up and manage team collaboration for the omykb knowledge base.
+Set up and manage team collaboration for the OMYKB knowledge base.
 
 ## Usage
 
@@ -59,12 +59,12 @@ Set up and manage team collaboration for the omykb knowledge base.
 For **git backend**:
 1. `cd <storage.path> && git add -A && git commit -m "KB update: $(date)"` 
 2. `git push origin <branch>`
-3. Show: `omykb> Pushed <n> changes to <remote>`
+3. Show: `OMYKB> Pushed <n> changes to <remote>`
 
 For **s3 backend**:
 1. Get list of locally modified files (compare mtimes vs last push timestamp).
 2. `aws s3 sync <storage.path> s3://<bucket>/<prefix> --exclude "*.tmp"` via Bash.
-3. Show: `omykb> Synced <n> files to s3://<bucket>/<prefix>`
+3. Show: `OMYKB> Synced <n> files to s3://<bucket>/<prefix>`
 
 ### Pull (`--pull`)
 
@@ -81,7 +81,7 @@ For **s3 backend**:
 
 Generate a shareable config snippet for a new teammate:
 ```
-omykb> Invite config for <name>
+OMYKB> Invite config for <name>
 
 Share this config with your teammate:
 

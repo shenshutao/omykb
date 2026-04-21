@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react'
 import Workspace from './pages/Workspace'
 import Settings from './pages/Settings'
-import { Workspace as WorkspaceRecord } from './types'
+import Onboarding from './pages/Onboarding'
+import { KBConfig, Workspace as WorkspaceRecord } from './types'
 
 type Page = 'workspace' | 'settings'
 export type SettingsSection = 'llm' | 'skills' | 'storage' | 'prompt'
@@ -58,6 +59,8 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('llm')
   const [popoverOpen, setPopoverOpen] = useState(false)
   const [workspaceRailCollapsed, setWorkspaceRailCollapsed] = useState(false)
+  const [cfg, setCfg] = useState<KBConfig | null>(null)
+  const [booting, setBooting] = useState(true)
   const popoverRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
 
@@ -69,12 +72,18 @@ export default function App() {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
 
-  useEffect(() => {
-    window.omykb.listWorkspaces().then(ws => {
-      setWorkspaces(ws)
-      if (ws.length > 0 && !activeWorkspaceId) setActiveWorkspaceId(ws[0].id)
-    })
-  }, [])
+  const loadBootState = async () => {
+    const [config, ws] = await Promise.all([
+      window.omykb.getConfig(),
+      window.omykb.listWorkspaces(),
+    ])
+    setCfg(config)
+    setWorkspaces(ws)
+    if (ws.length > 0 && !activeWorkspaceId) setActiveWorkspaceId(ws[0].id)
+    setBooting(false)
+  }
+
+  useEffect(() => { loadBootState() }, [])
 
   const createWorkspace = async () => {
     const name = newWsName.trim() || 'Untitled'
@@ -119,6 +128,24 @@ export default function App() {
     setSettingsSection(section)
     setPage('settings')
     setPopoverOpen(false)
+  }
+
+  if (booting || !cfg) {
+    return <div className="h-screen bg-[#0d1117]" />
+  }
+
+  if (!cfg.setupCompleted) {
+    return (
+      <Onboarding
+        initialConfig={cfg}
+        onComplete={(nextWorkspaces, nextActiveWorkspaceId) => {
+          setCfg(prev => prev ? { ...prev, setupCompleted: true } : prev)
+          setWorkspaces(nextWorkspaces)
+          setActiveWorkspaceId(nextActiveWorkspaceId)
+          setPage('workspace')
+        }}
+      />
+    )
   }
 
   return (

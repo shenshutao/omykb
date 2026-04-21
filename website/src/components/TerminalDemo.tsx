@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react'
 
 const DEMO_LINES = [
   { delay: 0,    type: 'prompt',  text: '/kb:init' },
-  { delay: 400,  type: 'output',  text: 'omykb> Storage backend? [local]' },
-  { delay: 800,  type: 'output',  text: 'omykb> AI provider? [openai]' },
-  { delay: 1200, type: 'success', text: 'omykb> Initialized: my-project ✓' },
+  { delay: 400,  type: 'output',  text: 'OMYKB> Storage backend? [local]' },
+  { delay: 800,  type: 'output',  text: 'OMYKB> AI provider? [openai]' },
+  { delay: 1200, type: 'success', text: 'OMYKB> Initialized: my-project ✓' },
   { delay: 1800, type: 'prompt',  text: '/kb:add ./architecture.pdf' },
-  { delay: 2200, type: 'output',  text: 'omykb> Added: Architecture Guide' },
+  { delay: 2200, type: 'output',  text: 'OMYKB> Added: Architecture Guide' },
   { delay: 2500, type: 'output',  text: '  Chunks: 24 · Words: 8,420 ✓' },
   { delay: 3200, type: 'prompt',  text: '/kb:ask "How does auth work?"' },
   { delay: 3700, type: 'answer',  text: 'The refresh token flow uses a 7-day' },
@@ -41,7 +41,7 @@ export default function TerminalDemo() {
         <div className="w-3 h-3 rounded-full bg-[#ff5f57]" />
         <div className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
         <div className="w-3 h-3 rounded-full bg-[#28ca41]" />
-        <span className="ml-3 text-slate-500 text-xs">claude-code — omykb</span>
+        <span className="ml-3 text-slate-500 text-xs">claude-code — OMYKB</span>
       </div>
 
       {/* Lines */}

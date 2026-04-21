@@ -130,7 +130,7 @@ function SkillDetail({ skill }: { skill: Skill }) {
                   isPrompt   ? 'text-cyan-400 mt-3 first:mt-0' :
                   isSuccess  ? 'text-green-400' :
                   isComment  ? 'text-slate-600' :
-                  line.startsWith('omykb>') ? 'text-slate-300' :
+                  line.startsWith('OMYKB>') ? 'text-slate-300' :
                   line.startsWith('  ') ? 'text-slate-400' :
                   'text-slate-300'
                 }

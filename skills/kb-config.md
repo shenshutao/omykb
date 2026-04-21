@@ -1,9 +1,9 @@
 ---
 name: kb-config
-description: View and update omykb configuration — storage backend, AI provider, team settings
+description: View and update OMYKB configuration — storage backend, AI provider, team settings
 ---
 
-View and update the omykb knowledge base configuration.
+View and update the OMYKB knowledge base configuration.
 
 ## Usage
 
@@ -19,7 +19,7 @@ View and update the omykb knowledge base configuration.
 2. Display in a human-readable table:
 
 ```
-omykb> Configuration
+OMYKB> Configuration
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Storage
   type:        local
@@ -69,14 +69,14 @@ Walk through configurable sections:
    - Chunk overlap: default 200 chars
 
 5. Write updated config to `.omykb/config.json`.
-6. Confirm: `omykb> Config saved.`
+6. Confirm: `OMYKB> Config saved.`
 
 ### Set a single value (`--set key value`)
 
 - Parse dot-notation key (e.g., `storage.type`, `ai.chat_model`).
 - Read current config, update the specified key, write back.
 - Validate the value if it has known allowed values.
-- Show: `omykb> Updated: <key> = <value>`
+- Show: `OMYKB> Updated: <key> = <value>`
 
 ## Config Key Reference
 

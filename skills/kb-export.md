@@ -3,7 +3,7 @@ name: kb-export
 description: Export the knowledge base to Markdown bundle, JSON, or a static HTML site
 ---
 
-Export all or part of the omykb knowledge base to a portable format.
+Export all or part of the OMYKB knowledge base to a portable format.
 
 ## Usage
 
@@ -99,7 +99,7 @@ The HTML site includes:
 6. Write output files.
 7. Report:
    ```
-   omykb> Export complete
+   OMYKB> Export complete
       Format:    <format>
       Documents: <n>
       Output:    <path>

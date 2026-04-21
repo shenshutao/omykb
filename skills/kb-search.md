@@ -3,7 +3,7 @@ name: kb-search
 description: Search the knowledge base with semantic + keyword matching, return ranked results with snippets
 ---
 
-Search across all documents in the omykb knowledge base. Returns ranked results with context snippets.
+Search across all documents in the OMYKB knowledge base. Returns ranked results with context snippets.
 
 ## Usage
 
@@ -39,7 +39,7 @@ Search across all documents in the omykb knowledge base. Returns ranked results 
 
 5. **Display results**:
    ```
-   omykb> Search: "<query>" — <n> results
+   OMYKB> Search: "<query>" — <n> results
    
    1. [Document Title]
       Source: <path>

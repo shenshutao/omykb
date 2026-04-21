@@ -3,7 +3,7 @@ name: kb-add
 description: Ingest content into the knowledge base — supports files, URLs, text, git repos, and images
 ---
 
-Add content to the omykb knowledge base. Reads `.omykb/config.json` for storage settings.
+Add content to the OMYKB knowledge base. Reads `.omykb/config.json` for storage settings.
 
 ## Usage Patterns
 
@@ -72,7 +72,7 @@ The user may provide:
    ```
 
 7. Print a success summary:
-   - `omykb> Added: <title>`
+   - `OMYKB> Added: <title>`
    - Source: `<source>`
    - Chunks: `<n>` · Words: `<n>`
    - Stored at: `<path>`

@@ -24,6 +24,15 @@ export interface KBConfig {
   storagePath: string
   systemPrompt?: string
   baseURL?: string
+  chatModel?: string
+  ingestionModel?: string
+  curationModel?: string
+  visionModel?: string
+  asrProvider?: 'openai' | 'aliyun'
+  asrApiKey?: string
+  asrModel?: string
+  asrBaseURL?: string
+  setupCompleted?: boolean
 }
 
 export interface Skill {
@@ -108,6 +117,11 @@ declare global {
       listDocumentsInWorkspace: (workspaceId: string) => Promise<Document[]>
       moveDocument: (docId: string, fromWorkspaceId: string, toWorkspaceId: string) => Promise<{ ok: boolean }>
       platform: string
+      recorder: {
+        transcribeChunk: (bytes: number[], ext: string) => Promise<{ text?: string; error?: string }>
+        translate: (text: string, targetLangCode: string) => Promise<{ text?: string; error?: string }>
+        summarize: (segments: string[]) => Promise<{ text?: string; error?: string }>
+      }
     }
   }
 }

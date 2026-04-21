@@ -1,9 +1,13 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, Menu, dialog, ipcMain, shell } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
 import { runAgentStream, KBConfig, ingestSourceToKB, IngestSourcePayload } from './agent'
+import { registerAudioRecorderHandlers } from './plugins/audio-recorder'
 
 const isDev = process.env.NODE_ENV === 'development'
+
+app.name = 'OMYKB'
+app.setName('OMYKB')
 
 // Default KB storage in ~/Documents/omykb
 function getDefaultStoragePath(): string {
@@ -23,6 +27,15 @@ function loadConfig(): KBConfig {
     storagePath: getDefaultStoragePath(),
     systemPrompt: '',
     baseURL: '',
+    chatModel: 'claude-opus-4-6',
+    ingestionModel: '',
+    curationModel: '',
+    visionModel: '',
+    asrProvider: 'openai',
+    asrApiKey: '',
+    asrModel: 'whisper-1',
+    asrBaseURL: '',
+    setupCompleted: false,
   }
   if (!fs.existsSync(cfgPath)) return defaults
   try {
@@ -92,6 +105,29 @@ function getWorkspaceStoragePath(baseStoragePath: string, workspaceId: string): 
 
 let mainWindow: BrowserWindow | null = null
 
+function installApplicationMenu(): void {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'OMYKB',
+      submenu: [
+        { role: 'about', label: 'About OMYKB' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide', label: 'Hide OMYKB' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit', label: 'Quit OMYKB' },
+      ],
+    },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+    { role: 'windowMenu' },
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -124,6 +160,9 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  app.name = 'OMYKB'
+  app.setName('OMYKB')
+  installApplicationMenu()
   createWindow()
 
   app.on('activate', () => {
@@ -136,6 +175,8 @@ app.on('window-all-closed', () => {
 })
 
 // IPC Handlers
+
+registerAudioRecorderHandlers(loadConfig)
 
 ipcMain.handle('kb:get-config', () => {
   return loadConfig()
@@ -185,7 +226,12 @@ ipcMain.handle('kb:pick-file', async () => {
     filters: [
       {
         name: 'Supported sources',
-        extensions: ['pdf', 'docx', 'pptx', 'xlsx', 'xls', 'csv', 'json', 'html', 'htm', 'xml', 'md', 'txt', 'ipynb', 'png', 'jpg', 'jpeg', 'webp', 'gif'],
+        extensions: [
+          'pdf', 'docx', 'pptx', 'xlsx', 'xls', 'csv', 'json', 'html', 'htm', 'xml', 'md', 'txt', 'ipynb',
+          'png', 'jpg', 'jpeg', 'webp', 'gif',
+          'mp3', 'wav', 'm4a', 'aac', 'flac', 'ogg', 'oga', 'opus',
+          'mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi', 'mpeg', 'mpg',
+        ],
       },
       { name: 'All files', extensions: ['*'] },
     ],

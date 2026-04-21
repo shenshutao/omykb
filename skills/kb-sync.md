@@ -3,7 +3,7 @@ name: kb-sync
 description: Sync content from external sources — GitHub repos, websites, Notion, local directories — into the knowledge base
 ---
 
-Pull and sync content from configured external sources into the omykb knowledge base.
+Pull and sync content from configured external sources into the OMYKB knowledge base.
 
 ## Usage
 
@@ -80,7 +80,7 @@ For each source in `config.sources`:
 
 After each source sync, update `last_synced` in config and print:
 ```
-omykb> Sync: <source-name>
+OMYKB> Sync: <source-name>
    New: <n> documents
    Updated: <n> documents
    Unchanged: <n> documents
@@ -90,7 +90,7 @@ omykb> Sync: <source-name>
 ### Final summary
 
 ```
-omykb> Sync complete
+OMYKB> Sync complete
    Sources: <n> synced
    Total new: <n> docs
    Total updated: <n> docs

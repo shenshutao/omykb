@@ -3,7 +3,7 @@ name: kb-graph
 description: Generate a Mermaid knowledge graph showing relationships between documents, topics, and concepts
 ---
 
-Generate a visual knowledge graph of the omykb knowledge base using Mermaid diagrams.
+Generate a visual knowledge graph of the OMYKB knowledge base using Mermaid diagrams.
 
 ## Usage
 
@@ -46,7 +46,7 @@ Generate a visual knowledge graph of the omykb knowledge base using Mermaid diag
 
    For `--format mermaid`:
    ```
-   omykb> Knowledge Graph
+   OMYKB> Knowledge Graph
    
    ```mermaid
    graph LR

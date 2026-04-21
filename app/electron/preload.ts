@@ -62,4 +62,14 @@ contextBridge.exposeInMainWorld('omykb', {
 
   // Platform
   platform: process.platform,
+
+  // Audio recorder plugin
+  recorder: {
+    transcribeChunk: (bytes: number[], ext: string) =>
+      ipcRenderer.invoke('recorder:transcribe-chunk', bytes, ext),
+    translate: (text: string, targetLangCode: string) =>
+      ipcRenderer.invoke('recorder:translate', text, targetLangCode),
+    summarize: (segments: string[]) =>
+      ipcRenderer.invoke('recorder:summarize', segments),
+  },
 })

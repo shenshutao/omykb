@@ -1,9 +1,9 @@
 ---
 name: kb-init
-description: Initialize a new omykb knowledge base with configurable storage backend and AI provider
+description: Initialize a new OMYKB knowledge base with configurable storage backend and AI provider
 ---
 
-Initialize a new omykb knowledge base in the current working directory.
+Initialize a new OMYKB knowledge base in the current working directory.
 
 ## Steps
 
@@ -74,7 +74,7 @@ Initialize a new omykb knowledge base in the current working directory.
 8. Add `.omykb/cache/` to `.gitignore` if a git repo is detected.
 
 9. Print a success summary showing what was created and next steps:
-   - `omykb> Initialized knowledge base: <name>`
+   - `OMYKB> Initialized knowledge base: <name>`
    - Storage: `<type>` at `<path>`
    - AI: `<provider>` / `<chat_model>`
    - Next: `/kb:add` to ingest your first document

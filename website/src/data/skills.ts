@@ -17,17 +17,17 @@ export const skills: Skill[] = [
     description: 'Set up a new knowledge base with your preferred storage backend (local, S3, or Git) and AI provider.',
     example: `> /kb:init
 
-omykb> Storage backend?
+OMYKB> Storage backend?
   ❯ local  — ./knowledge/
     s3     — S3-compatible bucket
     git    — Git repo (team-friendly)
 
-omykb> AI provider?
+OMYKB> AI provider?
   ❯ openai     — GPT-4o + embeddings
     anthropic  — Claude claude-sonnet-4-6
     ollama     — Local models
 
-omykb> Initialized: my-project
+OMYKB> Initialized: my-project
   Storage: local @ ./knowledge/
   AI: openai / gpt-4o
   Next: /kb:add`,
@@ -41,14 +41,14 @@ omykb> Initialized: my-project
     flags: ['<file>', '<url>', '<text>', '--git <repo>'],
     example: `> /kb:add ./architecture.pdf
 
-omykb> Added: System Architecture Guide
+OMYKB> Added: System Architecture Guide
   Source: ./architecture.pdf
   Chunks: 24 · Words: 8,420
   Stored: ./knowledge/architecture-guide.md
 
 > /kb:add https://docs.example.com/api
 
-omykb> Added: API Reference v3
+OMYKB> Added: API Reference v3
   Source: https://docs.example.com/api
   Chunks: 61 · Words: 22,100`,
   },
@@ -86,7 +86,7 @@ Tokens are stored in httpOnly cookies — not localStorage
     flags: ['<query>'],
     example: `> /kb:search "rate limiting"
 
-omykb> Search: "rate limiting" — 4 results
+OMYKB> Search: "rate limiting" — 4 results
 
 1. [API Rate Limiting Policy]
    Source: ./knowledge/api-policy.md
@@ -106,7 +106,7 @@ omykb> Search: "rate limiting" — 4 results
     flags: ['--dry-run', '--topic <tag>'],
     example: `> /kb:organize
 
-omykb> Curator Analysis
+OMYKB> Curator Analysis
   📊 42 docs · 8 topics · 6 issues
 
   Issues:
@@ -130,7 +130,7 @@ Apply? [y/n]`,
     flags: ['--source <name>', '--add'],
     example: `> /kb:sync --add
 
-omykb> Source type?
+OMYKB> Source type?
   ❯ git    — GitHub / GitLab repo
     web    — Website / docs site
     notion — Notion workspace
@@ -141,7 +141,7 @@ Source URL: https://github.com/org/docs
 
 > /kb:sync
 
-omykb> Sync: org/docs
+OMYKB> Sync: org/docs
   New:       8 documents
   Updated:   3 documents
   Unchanged: 41 documents`,
@@ -155,7 +155,7 @@ omykb> Sync: org/docs
     flags: ['--brief'],
     example: `> /kb:status
 
-omykb> Knowledge Base Status
+OMYKB> Knowledge Base Status
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Name:    my-project
 Storage: local · 24 MB
@@ -209,7 +209,7 @@ Edges: 22 relationships`,
     flags: ['--format markdown|json|html', '--topic <tag>', '--output <path>'],
     example: `> /kb:export --format html --output ./kb-site
 
-omykb> Export complete
+OMYKB> Export complete
   Format:    html (static site)
   Documents: 87
   Output:    ./kb-site/
@@ -230,18 +230,18 @@ Serve locally: npx serve ./kb-site`,
     flags: ['--setup', '--push', '--pull', '--invite <name>'],
     example: `> /kb:team --setup
 
-omykb> Team backend?
+OMYKB> Team backend?
   ❯ git — GitHub / GitLab / Gitea
     s3  — S3-compatible bucket
 
 Repo URL: https://github.com/org/knowledge
 
-omykb> Team sync enabled ✅
+OMYKB> Team sync enabled ✅
   Remote: github.com/org/knowledge
   Branch: main
 
 > /kb:team --push
-omykb> Pushed 5 changes → github.com/org/knowledge`,
+OMYKB> Pushed 5 changes → github.com/org/knowledge`,
   },
   {
     id: 'config',
@@ -252,11 +252,11 @@ omykb> Pushed 5 changes → github.com/org/knowledge`,
     flags: ['--edit', '--set <key> <value>'],
     example: `> /kb:config --set ai.chat_model claude-sonnet-4-6
 
-omykb> Updated: ai.chat_model = claude-sonnet-4-6
+OMYKB> Updated: ai.chat_model = claude-sonnet-4-6
 
 > /kb:config
 
-omykb> Configuration
+OMYKB> Configuration
   Storage:  local @ ./knowledge
   AI:       anthropic / claude-sonnet-4-6
   Embeddings: text-embedding-3-small

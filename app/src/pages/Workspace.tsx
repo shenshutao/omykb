@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import Chat from './Chat'
+import AudioRecorder from './AudioRecorder'
 import { Document, IngestResult, IngestSourcePayload, ToolEvent, Workspace } from '../types'
 
 function formatSize(bytes?: number) {
@@ -77,6 +78,7 @@ export default function WorkspacePage({
   workspaces: Workspace[]
   onGoToSettings: () => void
 }) {
+  const [view, setView] = useState<'main' | 'record'>('main')
   const [docs, setDocs] = useState<Document[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [content, setContent] = useState<string | null>(null)
@@ -180,6 +182,16 @@ export default function WorkspacePage({
   const selectedDoc = docs.find(doc => doc.id === selected) || null
   const otherWorkspaces = workspaces.filter(w => w.id !== workspaceId)
   const selectedTraceResult = selectedDoc && lastImportResult?.id === selectedDoc.id ? lastImportResult : null
+
+  if (view === 'record') {
+    return (
+      <AudioRecorder
+        workspaceId={workspaceId}
+        onBack={() => setView('main')}
+        onSaved={() => { setView('main'); load() }}
+      />
+    )
+  }
 
   return (
     <div className="h-full flex overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(67,56,202,0.14),_transparent_32%),linear-gradient(180deg,_#0c1018_0%,_#0b0f17_100%)]">
@@ -463,7 +475,7 @@ export default function WorkspacePage({
               <button onClick={() => setAdding(false)} className="btn-ghost rounded-full" disabled={addBusy}>Close</button>
             </div>
 
-            <div className="mt-5 flex gap-2">
+            <div className="mt-5 flex gap-2 flex-wrap">
               {(['text', 'file', 'url', 'git'] as const).map(type => (
                 <button
                   key={type}
@@ -475,6 +487,18 @@ export default function WorkspacePage({
                   {type === 'text' ? 'Text' : type === 'file' ? 'File' : type === 'url' ? 'Website' : 'Git Repo'}
                 </button>
               ))}
+              <button
+                onClick={() => { setAdding(false); setView('record') }}
+                className="rounded-full px-4 py-2 text-sm transition-colors bg-white/[0.04] text-slate-300 hover:bg-white/[0.08] flex items-center gap-1.5"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+                Record
+              </button>
             </div>
 
             <div className="mt-5 space-y-3">
@@ -493,7 +517,7 @@ export default function WorkspacePage({
               {addType === 'file' && (
                 <div className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
                   <div className="text-xs text-slate-400">
-                    Supported: PDF, DOCX, PPTX, XLSX, CSV, JSON, HTML, XML, Markdown, TXT, IPYNB, images
+                    Supported: PDF, DOCX, PPTX, XLSX, CSV, JSON, HTML, XML, Markdown, TXT, IPYNB, images, audio, video
                   </div>
                   <button onClick={pickLocalFile} className="btn-ghost rounded-full" type="button">
                     Choose file

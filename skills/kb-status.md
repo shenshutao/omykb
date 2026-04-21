@@ -3,7 +3,7 @@ name: kb-status
 description: Show knowledge base statistics, health, storage usage, and recent activity
 ---
 
-Display a comprehensive status report for the omykb knowledge base.
+Display a comprehensive status report for the OMYKB knowledge base.
 
 ## Usage
 
@@ -49,7 +49,7 @@ Display a comprehensive status report for the omykb knowledge base.
 4. **Display**:
 
 ```
-omykb> Knowledge Base Status
+OMYKB> Knowledge Base Status
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Name:     <name>
 Location: <storage.path>

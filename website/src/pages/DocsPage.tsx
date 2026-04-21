@@ -83,7 +83,7 @@ const SECTIONS: Section[] = [
     title: 'Quick Start',
     content: (
       <>
-        <P>Get omykb running in under 2 minutes.</P>
+        <P>Get OMYKB running in under 2 minutes.</P>
 
         <H2>1. Install skills</H2>
         <P>Clone the repo and copy the skills into your Claude Code skills directory:</P>
@@ -128,7 +128,7 @@ Sources:
     title: 'Installation',
     content: (
       <>
-        <P>omykb is a collection of Claude Code skill files — no binary to install, no dependencies.</P>
+        <P>OMYKB is a collection of Claude Code skill files — no binary to install, no dependencies.</P>
 
         <H2>Requirements</H2>
         <ul className="list-disc list-inside text-slate-400 space-y-1.5 mb-4 text-sm">
@@ -150,7 +150,7 @@ mv kb-*.md ~/.claude/skills/`}</Code>
 ❯ /kb:status
 
 # Should show:
-omykb> No KB initialized in this directory.
+OMYKB> No KB initialized in this directory.
 # (This means the skill is installed correctly)
 # Run /kb:init to initialize a new KB.`}</Code>
 
@@ -172,7 +172,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
     title: 'Storage Backends',
     content: (
       <>
-        <P>omykb supports three storage backends. Configure in <code className="text-slate-300">.omykb/config.json</code> or via <code className="text-indigo-400">/kb:config --edit</code>.</P>
+        <P>OMYKB supports three storage backends. Configure in <code className="text-slate-300">.omykb/config.json</code> or via <code className="text-indigo-400">/kb:config --edit</code>.</P>
 
         <H2>Local (default)</H2>
         <P>Documents stored in a local directory. Simplest setup, works offline.</P>
@@ -222,7 +222,7 @@ export AWS_SECRET_ACCESS_KEY=...`}</Code>
     title: 'AI Providers',
     content: (
       <>
-        <P>omykb works with any AI provider for Q&A. Configure via <code className="text-indigo-400">/kb:config --edit</code>.</P>
+        <P>OMYKB works with any AI provider for Q&A. Configure via <code className="text-indigo-400">/kb:config --edit</code>.</P>
 
         <H2>OpenAI (recommended)</H2>
         <Code>{`{
@@ -294,7 +294,7 @@ export ANTHROPIC_API_KEY=sk-ant-...`}</Code>
         <P>Generate a one-liner config for new teammates:</P>
         <Code>{`❯ /kb:team --invite alice
 
-omykb> Invite config for alice:
+OMYKB> Invite config for alice:
 
 {
   "storage": { "type": "git", "repo": "...", "branch": "main" },
@@ -379,7 +379,7 @@ Share this + run: /kb:init (paste config)`}</Code>
     content: (
       <>
         <P>
-          All omykb functionality is available as Claude Code skills — plain Markdown files that
+          All OMYKB functionality is available as Claude Code skills — plain Markdown files that
           Claude Code reads and executes as slash commands.
         </P>
 

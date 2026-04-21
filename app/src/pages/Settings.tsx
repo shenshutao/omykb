@@ -21,6 +21,75 @@ const MODELS: Record<KBConfig['provider'], Array<{ id: string; label: string }>>
   ],
 }
 
+const ASR_PROVIDERS: Array<{ id: NonNullable<KBConfig['asrProvider']>; label: string; description: string }> = [
+  { id: 'openai', label: 'OpenAI Whisper', description: 'Local file upload transcription. Works for local audio and extracted video audio.' },
+  { id: 'aliyun', label: 'Aliyun DashScope', description: 'Paraformer recorded-file recognition. Requires HTTP/HTTPS media URLs.' },
+]
+
+const ASR_MODELS: Record<NonNullable<KBConfig['asrProvider']>, Array<{ id: string; label: string }>> = {
+  openai: [
+    { id: 'whisper-1', label: 'Whisper 1' },
+  ],
+  aliyun: [
+    { id: 'paraformer-v2', label: 'Paraformer v2 (Recommended)' },
+    { id: 'paraformer-8k-v2', label: 'Paraformer 8k v2' },
+    { id: 'paraformer-v1', label: 'Paraformer v1' },
+    { id: 'paraformer-8k-v1', label: 'Paraformer 8k v1' },
+    { id: 'paraformer-mtl-v1', label: 'Paraformer MTL v1' },
+  ],
+}
+
+function ModelField({
+  label,
+  description,
+  value,
+  fallback,
+  models,
+  onChange,
+}: {
+  label: string
+  description: string
+  value?: string
+  fallback: string
+  models: Array<{ id: string; label: string }>
+  onChange: (value: string) => void
+}) {
+  const selected = value || fallback
+  return (
+    <section className="card p-5">
+      <h2 className="text-sm font-semibold text-slate-200 mb-1">{label}</h2>
+      <p className="text-xs text-slate-500 mb-3">{description}</p>
+      <div className="space-y-2">
+        {models.map(m => (
+          <label key={m.id} className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="radio"
+              value={m.id}
+              checked={selected === m.id}
+              onChange={() => onChange(m.id)}
+              className="accent-indigo-500"
+            />
+            <div>
+              <div className="text-sm text-slate-300">{m.label}</div>
+              <div className="text-xs text-slate-600 font-mono">{m.id}</div>
+            </div>
+          </label>
+        ))}
+      </div>
+      <div className="mt-3 pt-3 border-t border-[#21262d]">
+        <p className="text-xs text-slate-500 mb-1.5">Custom model ID:</p>
+        <input
+          type="text"
+          value={models.some(m => m.id === selected) ? '' : selected}
+          onChange={e => onChange(e.target.value)}
+          placeholder={fallback}
+          className="input-base font-mono text-xs"
+        />
+      </div>
+    </section>
+  )
+}
+
 // ── LLM & API ────────────────────────────────────────────────────────────────
 function LLMPage({ cfg, update, switchProvider, save, saved }: {
   cfg: KBConfig
@@ -30,7 +99,10 @@ function LLMPage({ cfg, update, switchProvider, save, saved }: {
   saved: boolean
 }) {
   const [apiKeyVisible, setApiKeyVisible] = useState(false)
+  const [asrKeyVisible, setAsrKeyVisible] = useState(false)
   const provider = cfg.provider || 'anthropic'
+  const chatModel = cfg.chatModel || cfg.model || MODELS[provider][0].id
+  const asrProvider = cfg.asrProvider || 'openai'
 
   return (
     <div className="h-full flex flex-col">
@@ -107,31 +179,112 @@ function LLMPage({ cfg, update, switchProvider, save, saved }: {
             </section>
           )}
 
+          <ModelField
+            label="Chat Model"
+            description="Used for grounded chat with your knowledge base."
+            value={chatModel}
+            fallback={MODELS[provider][0].id}
+            models={MODELS[provider]}
+            onChange={value => { update('chatModel', value); update('model', value) }}
+          />
+
+          <ModelField
+            label="Ingestion Agent Model"
+            description="Used when skills orchestrate parser tools during import. Leave blank by matching chat model if you want one model for everything."
+            value={cfg.ingestionModel || chatModel}
+            fallback={chatModel}
+            models={MODELS[provider]}
+            onChange={value => update('ingestionModel', value)}
+          />
+
+          <ModelField
+            label="Curation Model"
+            description="Used to turn extracted raw content into clean Markdown notes."
+            value={cfg.curationModel || chatModel}
+            fallback={chatModel}
+            models={MODELS[provider]}
+            onChange={value => update('curationModel', value)}
+          />
+
+          <ModelField
+            label="Vision Model"
+            description="Used for image understanding, screenshots, diagrams, and scanned visual content."
+            value={cfg.visionModel || chatModel}
+            fallback={chatModel}
+            models={MODELS[provider]}
+            onChange={value => update('visionModel', value)}
+          />
+
           <section className="card p-5">
-            <h2 className="text-sm font-semibold text-slate-200 mb-1">Model</h2>
-            <div className="space-y-2">
-              {MODELS[provider].map(m => (
-                <label key={m.id} className="flex items-center gap-3 cursor-pointer">
-                  <input type="radio" name="model" value={m.id} checked={cfg.model === m.id}
-                    onChange={() => update('model', m.id)} className="accent-indigo-500" />
-                  <div>
-                    <div className="text-sm text-slate-300">{m.label}</div>
-                    <div className="text-xs text-slate-600 font-mono">{m.id}</div>
-                  </div>
-                </label>
+            <h2 className="text-sm font-semibold text-slate-200 mb-1">ASR Provider</h2>
+            <p className="text-xs text-slate-500 mb-3">Choose which provider transcribes imported audio and video.</p>
+            <div className="grid gap-2">
+              {ASR_PROVIDERS.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    update('asrProvider', p.id)
+                    update('asrModel', ASR_MODELS[p.id][0].id)
+                    update('asrBaseURL', p.id === 'aliyun' ? 'https://dashscope.aliyuncs.com' : '')
+                  }}
+                  className={`rounded-xl border px-4 py-3 text-left transition-colors ${
+                    asrProvider === p.id
+                      ? 'border-indigo-500 bg-indigo-500/10'
+                      : 'border-[#21262d] hover:border-[#30363d] hover:bg-[#161b22]'
+                  }`}
+                >
+                  <div className="text-sm font-medium text-slate-200">{p.label}</div>
+                  <div className="mt-1 text-xs text-slate-500">{p.description}</div>
+                </button>
               ))}
             </div>
-            <div className="mt-3 pt-3 border-t border-[#21262d]">
-              <p className="text-xs text-slate-500 mb-1.5">Or enter a custom model ID:</p>
+          </section>
+
+          <section className="card p-5">
+            <h2 className="text-sm font-semibold text-slate-200 mb-1">ASR API Key</h2>
+            <p className="text-xs text-slate-500 mb-3">
+              {asrProvider === 'aliyun'
+                ? 'DashScope API key for Aliyun Paraformer ASR.'
+                : 'OpenAI API key for Whisper. Leave blank to reuse the main OpenAI key.'}
+            </p>
+            <div className="flex gap-2">
               <input
-                type="text"
-                value={MODELS[provider].some(m => m.id === cfg.model) ? '' : cfg.model}
-                onChange={e => update('model', e.target.value)}
-                placeholder={MODELS[provider][0].id}
-                className="input-base font-mono text-xs"
+                type={asrKeyVisible ? 'text' : 'password'}
+                value={cfg.asrApiKey || ''}
+                onChange={e => update('asrApiKey', e.target.value)}
+                placeholder={asrProvider === 'aliyun' ? 'sk-...' : 'reuse main key if blank'}
+                className="input-base flex-1 font-mono"
               />
+              <button onClick={() => setAsrKeyVisible(v => !v)} className="btn-ghost px-3">
+                {asrKeyVisible ? 'Hide' : 'Show'}
+              </button>
             </div>
           </section>
+
+          {asrProvider === 'aliyun' && (
+            <section className="card p-5">
+              <h2 className="text-sm font-semibold text-slate-200 mb-1">DashScope Base URL</h2>
+              <p className="text-xs text-slate-500 mb-3">Default endpoint for Aliyun Model Studio / DashScope.</p>
+              <input
+                type="text"
+                value={cfg.asrBaseURL || 'https://dashscope.aliyuncs.com'}
+                onChange={e => update('asrBaseURL', e.target.value)}
+                placeholder="https://dashscope.aliyuncs.com"
+                className="input-base font-mono text-xs"
+              />
+            </section>
+          )}
+
+          <ModelField
+            label="ASR Model"
+            description={asrProvider === 'aliyun'
+              ? 'Aliyun recorded-file recognition model. paraformer-v2 is recommended for multilingual meeting/media files.'
+              : 'OpenAI audio transcription model.'}
+            value={cfg.asrModel || ASR_MODELS[asrProvider][0].id}
+            fallback={ASR_MODELS[asrProvider][0].id}
+            models={ASR_MODELS[asrProvider]}
+            onChange={value => update('asrModel', value)}
+          />
         </div>
       </div>
       <div className="border-t border-[#21262d] px-6 py-4 flex items-center gap-3">
@@ -317,7 +470,20 @@ export default function Settings({ section = 'llm' }: { section?: SettingsSectio
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    window.omykb.getConfig().then(c => setCfg({ provider: 'anthropic', baseURL: '', ...c }))
+    window.omykb.getConfig().then(c => setCfg({
+      provider: 'anthropic',
+      model: 'claude-opus-4-6',
+      chatModel: c.chatModel || c.model || 'claude-opus-4-6',
+      ingestionModel: c.ingestionModel || '',
+      curationModel: c.curationModel || '',
+      visionModel: c.visionModel || '',
+      asrProvider: c.asrProvider || 'openai',
+      asrApiKey: c.asrApiKey || '',
+      asrModel: c.asrModel || 'whisper-1',
+      asrBaseURL: c.asrBaseURL || '',
+      baseURL: '',
+      ...c,
+    }))
   }, [])
 
   // Reset saved indicator when switching sections
@@ -331,7 +497,18 @@ export default function Settings({ section = 'llm' }: { section?: SettingsSectio
 
   const switchProvider = (provider: KBConfig['provider']) => {
     if (!cfg) return
-    setCfg(prev => ({ ...prev!, provider, model: MODELS[provider][0].id, apiKey: '', baseURL: '' }))
+    const model = MODELS[provider][0].id
+    setCfg(prev => ({
+      ...prev!,
+      provider,
+      model,
+      chatModel: model,
+      ingestionModel: '',
+      curationModel: '',
+      visionModel: '',
+      apiKey: '',
+      baseURL: '',
+    }))
     setSaved(false)
   }
 

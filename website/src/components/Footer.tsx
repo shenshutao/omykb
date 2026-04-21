@@ -9,7 +9,7 @@ export default function Footer() {
             <span className="text-white text-xs font-bold font-mono">kb</span>
           </div>
           <span className="text-sm text-slate-500 font-mono">
-            omykb — MIT License
+            OMYKB — MIT License
           </span>
         </div>
         <nav className="flex items-center gap-5 text-sm text-slate-500">
