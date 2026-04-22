@@ -26,7 +26,7 @@ async function buildAll() {
     outfile: 'dist-electron/main.js',
     platform: 'node',
     format: 'cjs',
-    external: ['electron'],
+    external: ['electron', 'proxy-agent'],
     define: {
       'process.env.NODE_ENV': dev ? '"development"' : '"production"',
     },

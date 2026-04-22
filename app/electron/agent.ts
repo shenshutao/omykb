@@ -23,10 +23,15 @@ export interface KBConfig {
   ingestionModel?: string
   curationModel?: string
   visionModel?: string
-  asrProvider?: 'openai' | 'aliyun'
+  asrProvider?: 'openai' | 'aliyun' | 'funasr-local'
   asrApiKey?: string
   asrModel?: string
   asrBaseURL?: string
+  diarizeBaseURL?: string
+  ossRegion?: string
+  ossAccessKeyId?: string
+  ossAccessKeySecret?: string
+  ossBucket?: string
   setupCompleted?: boolean
 }
 
@@ -38,6 +43,7 @@ export const DEFAULT_MODELS: Record<KBConfig['provider'], string> = {
 const DEFAULT_ASR_MODELS: Record<NonNullable<KBConfig['asrProvider']>, string> = {
   openai: 'whisper-1',
   aliyun: 'paraformer-v2',
+  'funasr-local': '2pass',
 }
 
 export interface IngestSourcePayload {

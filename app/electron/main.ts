@@ -1,6 +1,9 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, shell } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
+import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
+import WebSocket from 'ws'
 import { runAgentStream, KBConfig, ingestSourceToKB, IngestSourcePayload } from './agent'
 import { registerAudioRecorderHandlers } from './plugins/audio-recorder'
 
@@ -439,6 +442,153 @@ ipcMain.handle('kb:get-skill', (_event, name: string) => {
 ipcMain.handle('kb:save-skill', (_event, source: string, content: string) => {
   fs.writeFileSync(source, content, 'utf-8')
   return { ok: true }
+})
+
+ipcMain.handle('kb:test-llm', async () => {
+  const cfg = loadConfig()
+  if (!cfg.apiKey) return { error: 'No API key configured.' }
+  const model = cfg.chatModel || cfg.model
+  const t0 = Date.now()
+  try {
+    if (cfg.provider === 'anthropic') {
+      const client = new Anthropic({
+        apiKey: cfg.apiKey,
+        ...(cfg.baseURL ? { baseURL: cfg.baseURL } : {}),
+      })
+      const msg = await client.messages.create({
+        model,
+        max_tokens: 16,
+        messages: [{ role: 'user', content: "Reply with just the word 'ok'." }],
+      })
+      const text = (msg.content[0] as { text: string }).text?.trim() ?? ''
+      return { ok: true, model, latency: Date.now() - t0, reply: text }
+    } else {
+      const client = new OpenAI({
+        apiKey: cfg.apiKey,
+        ...(cfg.baseURL ? { baseURL: cfg.baseURL } : {}),
+      })
+      const res = await client.chat.completions.create({
+        model,
+        max_tokens: 16,
+        messages: [{ role: 'user', content: "Reply with just the word 'ok'." }],
+      })
+      const text = res.choices[0]?.message?.content?.trim() ?? ''
+      return { ok: true, model, latency: Date.now() - t0, reply: text }
+    }
+  } catch (err: unknown) {
+    return { error: err instanceof Error ? err.message : String(err) }
+  }
+})
+
+ipcMain.handle('kb:test-asr', async () => {
+  const cfg = loadConfig()
+  const provider = cfg.asrProvider || 'openai'
+  const t0 = Date.now()
+
+  // ── OpenAI Whisper ──
+  if (provider === 'openai') {
+    const apiKey = cfg.asrApiKey || cfg.apiKey
+    if (!apiKey) return { error: 'No API key configured.' }
+    try {
+      const client = new OpenAI({
+        apiKey,
+        ...(cfg.asrBaseURL ? { baseURL: cfg.asrBaseURL } : {}),
+      })
+      const models = await client.models.list()
+      const whisper = models.data.find(m => m.id.includes('whisper'))
+      const modelId = cfg.asrModel || 'whisper-1'
+      const found = models.data.some(m => m.id === modelId)
+      if (!found && !whisper) return { error: `Model "${modelId}" not found on this endpoint.` }
+      return { ok: true, model: modelId, latency: Date.now() - t0 }
+    } catch (err: unknown) {
+      return { error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  // ── Aliyun DashScope ──
+  if (provider === 'aliyun') {
+    const apiKey = cfg.asrApiKey || cfg.apiKey
+    if (!apiKey) return { error: 'No API key configured.' }
+    const baseURL = (cfg.asrBaseURL || 'https://dashscope-intl.aliyuncs.com').replace(/\/$/, '')
+    try {
+      const res = await fetch(`${baseURL}/api/v1/services/audio/asr/transcription`, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${apiKey}` },
+      })
+      if (res.status === 401) return { error: 'Invalid API key — DashScope returned 401 Unauthorized.' }
+      if (res.status === 403) return { error: 'Access denied — DashScope returned 403 Forbidden.' }
+      // 405 Method Not Allowed or any other 4xx means the endpoint is reachable and key is accepted
+      return { ok: true, model: cfg.asrModel || 'fun-asr-realtime', latency: Date.now() - t0 }
+    } catch (err: unknown) {
+      return { error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  // ── FunASR Local ──
+  if (provider === 'funasr-local') {
+    const wsUrl = (cfg.asrBaseURL || 'ws://localhost:10096')
+      .replace(/^http:/, 'ws:').replace(/^https:/, 'wss:')
+    return new Promise<{ ok?: boolean; model?: string; latency?: number; error?: string }>(resolve => {
+      let resolved = false
+      const done = (result: { ok?: boolean; model?: string; latency?: number; error?: string }) => {
+        if (resolved) return
+        resolved = true
+        clearTimeout(timer)
+        try { ws.terminate() } catch { /* ignore */ }
+        resolve(result)
+      }
+
+      // Timeout: if we connected but got no response, the server is likely still loading models
+      const timer = setTimeout(() => {
+        done(connected
+          ? { ok: true, model: cfg.asrModel || '2pass', latency: Date.now() - t0 }
+          : { error: `Connection timed out after 6s. Is FunASR running at ${wsUrl}?` })
+      }, 6000)
+
+      let connected = false
+      const ws = new WebSocket(wsUrl)
+
+      ws.once('open', () => {
+        connected = true
+        // Send a proper config + immediate end-of-speech so the server responds
+        try {
+          ws.send(JSON.stringify({
+            mode: cfg.asrModel || '2pass',
+            chunk_size: [5, 10, 5],
+            chunk_interval: 10,
+            wav_name: 'omykb-test',
+            is_speaking: true,
+            wav_format: 'pcm',
+            itn: false,
+          }))
+          // End immediately — server will flush and close
+          ws.send(JSON.stringify({ is_speaking: false }))
+        } catch { /* ignore send errors */ }
+      })
+
+      // Any message back means the server is fully up and responding
+      ws.once('message', () => {
+        done({ ok: true, model: cfg.asrModel || '2pass', latency: Date.now() - t0 })
+      })
+
+      ws.once('close', () => {
+        // Server closed after our end-of-speech — that's a successful handshake
+        if (connected) done({ ok: true, model: cfg.asrModel || '2pass', latency: Date.now() - t0 })
+      })
+
+      ws.once('error', err => {
+        const raw = err.message
+        const msg = raw.includes('ECONNRESET')
+          ? `Server reset the connection — models may still be loading. Wait ~30s after Docker starts, then retry.`
+          : raw.includes('ECONNREFUSED')
+          ? `Connection refused at ${wsUrl} — is the Docker container running?`
+          : raw
+        done({ error: msg })
+      })
+    })
+  }
+
+  return { error: 'Unknown ASR provider.' }
 })
 
 ipcMain.handle('kb:send-message', async (event, messages: Array<{ role: string; content: string }>) => {

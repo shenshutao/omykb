@@ -21,3 +21,6 @@ app/release/
 # Logs
 npm-debug.log*
 *.log
+
+# FunASR local model cache (downloaded at runtime)
+funasr-models/

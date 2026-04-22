@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
+import type { KBConfig } from '../types'
 
 type RecordingState = 'idle' | 'recording' | 'stopped'
 
@@ -76,6 +77,18 @@ export default function AudioRecorder({
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
   const [permError, setPermError] = useState('')
+  const [cfg, setCfg] = useState<KBConfig | null>(null)
+  // Post-recording translation
+  const [batchTranslating, setBatchTranslating] = useState(false)
+  const [batchTargetLang, setBatchTargetLang] = useState('zh')
+  // Diarization state
+  const [diarizeStatus, setDiarizeStatus] = useState<'idle' | 'uploading' | 'transcribing' | 'done' | 'error'>('idle')
+  const [diarizeError, setDiarizeError] = useState('')
+  const [speakerMap, setSpeakerMap] = useState<Map<string, string>>(new Map())
+  const [speakerCount, setSpeakerCount] = useState(2)
+  const [meetingNotes, setMeetingNotes] = useState('')
+  const [generatingNotes, setGeneratingNotes] = useState(false)
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const streamRef = useRef<MediaStream | null>(null)
   const recorderRef = useRef<MediaRecorder | null>(null)
@@ -93,10 +106,49 @@ export default function AudioRecorder({
   const targetLangRef = useRef('en')
   const transcriptEndRef = useRef<HTMLDivElement>(null)
   const summaryEndRef = useRef<HTMLDivElement>(null)
+  // DashScope realtime
+  const dsAudioCtxRef = useRef<AudioContext | null>(null)
+  const dsProcessorRef = useRef<ScriptProcessorNode | null>(null)
 
   useEffect(() => { segmentsRef.current = segments }, [segments])
   useEffect(() => { translateEnabledRef.current = translateEnabled }, [translateEnabled])
   useEffect(() => { targetLangRef.current = targetLang }, [targetLang])
+
+  // Load config once
+  useEffect(() => { window.omykb.getConfig().then(setCfg) }, [])
+
+  // DashScope / FunASR result listener
+  useEffect(() => {
+    const offResult = window.omykb.recorder.onDashScopeResult(({ text, isFinal, sentenceId, spkLabel }) => {
+      const id = `ds_${sentenceId}`
+      setSegments(prev => {
+        const existing = prev.find(s => s.id === id)
+        if (existing) return prev.map(s => s.id === id ? { ...s, original: text, pending: !isFinal } : s)
+        return [...prev, { id, startSec: elapsedRef.current, original: text, translating: false, pending: !isFinal }]
+      })
+      // For FunASR local: auto-populate speaker map from spk_label on final result
+      if (isFinal && spkLabel) {
+        const speakerIdx = parseInt(spkLabel.replace(/\D/g, ''), 10) || 0
+        const label = `Speaker ${String.fromCharCode(65 + (speakerIdx % 26))}`
+        setSpeakerMap(prev => { const next = new Map(prev); next.set(id, label); return next })
+        setDiarizeStatus('done')
+      }
+      // Translate final segments in realtime
+      if (isFinal && text.trim() && translateEnabledRef.current) {
+        setSegments(prev => prev.map(s => s.id === id ? { ...s, translating: true } : s))
+        window.omykb.recorder.translate(text, targetLangRef.current).then(res => {
+          setSegments(prev => prev.map(s => s.id === id ? { ...s, translation: res.text, translating: false } : s))
+        })
+      }
+    })
+    const offError = window.omykb.recorder.onDashScopeError(msg => {
+      setPermError(`DashScope error: ${msg}`)
+    })
+    const offDone = window.omykb.recorder.onDashScopeDone(() => {
+      setRecState('stopped')
+    })
+    return () => { offResult(); offError(); offDone() }
+  }, [])
 
   useEffect(() => {
     if (transcriptEndRef.current) {
@@ -206,12 +258,37 @@ export default function AudioRecorder({
     recorderRef.current = rec
   }, [processChunk])
 
+  const isStreamingASR = cfg?.asrProvider === 'aliyun' || cfg?.asrProvider === 'funasr-local'
+  const isDashScope = isStreamingASR   // keep alias for backward compat with existing logic
+  const isFunASRLocal = cfg?.asrProvider === 'funasr-local'
+
+  const startDashScopeCapture = useCallback((stream: MediaStream) => {
+    const dsCtx = new AudioContext({ sampleRate: 16000 })
+    const source = dsCtx.createMediaStreamSource(stream)
+    // ScriptProcessorNode: 4096 samples @ 16kHz = 256ms per callback
+    const processor = dsCtx.createScriptProcessor(4096, 1, 1)
+    processor.onaudioprocess = e => {
+      if (!isRecordingRef.current) return
+      const f32 = e.inputBuffer.getChannelData(0)
+      const i16 = new Int16Array(f32.length)
+      for (let i = 0; i < f32.length; i++) {
+        i16[i] = Math.max(-32768, Math.min(32767, Math.round(f32[i] * 32767)))
+      }
+      window.omykb.recorder.sendAudioFrame(Array.from(i16))
+    }
+    source.connect(processor)
+    processor.connect(dsCtx.destination)
+    dsAudioCtxRef.current = dsCtx
+    dsProcessorRef.current = processor
+  }, [])
+
   const start = useCallback(async () => {
     setPermError('')
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
       streamRef.current = stream
 
+      // Waveform visualizer (runs at default sample rate)
       const ctx = new AudioContext()
       const source = ctx.createMediaStreamSource(stream)
       const analyser = ctx.createAnalyser()
@@ -231,26 +308,30 @@ export default function AudioRecorder({
         setElapsed(elapsedRef.current)
       }, 500)
 
-      startSegment(stream)
-
-      chunkTimerRef.current = setInterval(() => {
-        if (!isRecordingRef.current || !streamRef.current) return
-        if (recorderRef.current?.state === 'recording') {
-          recorderRef.current.stop()
-        }
-        setTimeout(() => {
-          if (isRecordingRef.current && streamRef.current) {
-            startSegment(streamRef.current)
-          }
-        }, 250)
-      }, CHUNK_INTERVAL_MS)
+      if (isDashScope) {
+        // DashScope real-time WebSocket mode
+        const model = cfg?.asrModel || 'fun-asr-realtime'
+        const res = await window.omykb.recorder.startDashScope(model)
+        if (res?.error) { setPermError(res.error); return }
+        startDashScopeCapture(stream)
+      } else {
+        // Whisper chunked mode
+        startSegment(stream)
+        chunkTimerRef.current = setInterval(() => {
+          if (!isRecordingRef.current || !streamRef.current) return
+          if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
+          setTimeout(() => {
+            if (isRecordingRef.current && streamRef.current) startSegment(streamRef.current)
+          }, 250)
+        }, CHUNK_INTERVAL_MS)
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       setPermError(msg.includes('Permission') || msg.includes('NotAllowed')
         ? 'Microphone access denied. Allow access in System Settings → Privacy → Microphone.'
         : msg)
     }
-  }, [drawWaveform, startSegment])
+  }, [drawWaveform, startSegment, isDashScope, cfg, startDashScopeCapture])
 
   const stop = useCallback(() => {
     isRecordingRef.current = false
@@ -259,20 +340,23 @@ export default function AudioRecorder({
     if (chunkTimerRef.current) { clearInterval(chunkTimerRef.current); chunkTimerRef.current = null }
     cancelAnimationFrame(animFrameRef.current)
 
-    if (recorderRef.current?.state === 'recording') {
-      recorderRef.current.stop()
+    if (isDashScope) {
+      dsProcessorRef.current?.disconnect()
+      dsAudioCtxRef.current?.close()
+      dsProcessorRef.current = null
+      dsAudioCtxRef.current = null
+      window.omykb.recorder.stopDashScope()
+      // recState will be set to 'stopped' when ds:done event fires
+    } else {
+      if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
+      if (segmentsSinceLastSummaryRef.current > 0) triggerSummary(elapsedRef.current)
+      setRecState('stopped')
     }
+
     streamRef.current?.getTracks().forEach(t => t.stop())
     audioCtxRef.current?.close()
-
     setWaveData(new Array(32).fill(0))
-    setRecState('stopped')
-
-    // Final summary if there are unsummarized segments
-    if (segmentsSinceLastSummaryRef.current > 0) {
-      triggerSummary(elapsedRef.current)
-    }
-  }, [triggerSummary])
+  }, [triggerSummary, isDashScope])
 
   useEffect(() => {
     return () => {
@@ -282,8 +366,85 @@ export default function AudioRecorder({
       cancelAnimationFrame(animFrameRef.current)
       streamRef.current?.getTracks().forEach(t => t.stop())
       audioCtxRef.current?.close()
+      dsProcessorRef.current?.disconnect()
+      dsAudioCtxRef.current?.close()
     }
   }, [])
+
+  const batchTranslate = useCallback(async (lang: string) => {
+    setBatchTranslating(true)
+    const toTranslate = segmentsRef.current.filter(s => s.original.trim() && !s.pending)
+    for (const seg of toTranslate) {
+      setSegments(prev => prev.map(s => s.id === seg.id ? { ...s, translating: true } : s))
+      const res = await window.omykb.recorder.translate(seg.original, lang)
+      setSegments(prev => prev.map(s => s.id === seg.id ? { ...s, translation: res.text, translating: false } : s))
+    }
+    setBatchTranslating(false)
+  }, [])
+
+  const SPEAKER_COLORS: Record<string, string> = {
+    'Speaker A': 'bg-indigo-400/10 text-indigo-300 border-indigo-400/30',
+    'Speaker B': 'bg-amber-400/10 text-amber-300 border-amber-400/30',
+    'Speaker C': 'bg-emerald-400/10 text-emerald-300 border-emerald-400/30',
+    'Speaker D': 'bg-rose-400/10 text-rose-300 border-rose-400/30',
+  }
+
+  const startDiarize = useCallback(async () => {
+    setDiarizeStatus('uploading')
+    setDiarizeError('')
+    setMeetingNotes('')
+
+    const res = await window.omykb.recorder.startDiarize(speakerCount)
+    if (res.error) { setDiarizeStatus('error'); setDiarizeError(res.error); return }
+
+    const taskId = res.taskId!
+    setDiarizeStatus('transcribing')
+
+    pollTimerRef.current = setInterval(async () => {
+      const poll = await window.omykb.recorder.pollDiarize(taskId)
+
+      if (poll.status === 'SUCCEEDED' && poll.sentences) {
+        clearInterval(pollTimerRef.current!)
+        pollTimerRef.current = null
+
+        // Map diarized sentences to existing segments by timestamp proximity
+        const newMap = new Map<string, string>()
+        for (const seg of segmentsRef.current) {
+          const segMs = seg.startSec * 1000
+          let best = poll.sentences[0]
+          let bestDiff = Math.abs(best.begin_time - segMs)
+          for (const s of poll.sentences) {
+            const diff = Math.abs(s.begin_time - segMs)
+            if (diff < bestDiff) { bestDiff = diff; best = s }
+          }
+          const label = `Speaker ${String.fromCharCode(65 + (best.speaker_id % 26))}`
+          newMap.set(seg.id, label)
+        }
+        setSpeakerMap(newMap)
+        setDiarizeStatus('done')
+      } else if (poll.status === 'FAILED') {
+        clearInterval(pollTimerRef.current!)
+        pollTimerRef.current = null
+        setDiarizeStatus('error')
+        setDiarizeError(poll.error || 'Diarization failed')
+      }
+    }, 4000)
+  }, [speakerCount])
+
+  const generateNotes = useCallback(async () => {
+    setGeneratingNotes(true)
+    const diarizedSegments = segmentsRef.current
+      .filter(s => s.original.trim() && !s.pending)
+      .map(s => ({
+        speaker: speakerMap.get(s.id) || 'Unknown',
+        time: s.startSec,
+        text: s.original,
+      }))
+    const res = await window.omykb.recorder.generateNotes(diarizedSegments)
+    if (res.text) setMeetingNotes(res.text)
+    if (res.error) setDiarizeError(res.error)
+    setGeneratingNotes(false)
+  }, [speakerMap])
 
   const saveToKB = useCallback(async () => {
     const valid = segments.filter(s => s.original.trim() && !s.pending)
@@ -364,13 +525,78 @@ export default function AudioRecorder({
           </div>
         </div>
 
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="flex items-center gap-3 flex-shrink-0 flex-wrap justify-end">
+          {/* DashScope (Aliyun): manual diarize via OSS upload */}
+          {recState === 'stopped' && isDashScope && !isFunASRLocal && hasContent && diarizeStatus === 'idle' && (
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-500">发言人数</label>
+              <select
+                value={speakerCount}
+                onChange={e => setSpeakerCount(Number(e.target.value))}
+                className="bg-white/[0.06] border border-white/10 rounded-lg px-2 py-1 text-xs text-slate-300 outline-none"
+              >
+                {[2,3,4,5,6].map(n => <option key={n} value={n}>{n}人</option>)}
+              </select>
+              <button
+                onClick={startDiarize}
+                className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                识别发言人
+              </button>
+            </div>
+          )}
+          {/* FunASR local: speaker labels are auto-populated from real-time results */}
+          {recState === 'stopped' && isFunASRLocal && hasContent && diarizeStatus === 'done' && speakerMap.size > 0 && (
+            <span className="flex items-center gap-1.5 text-xs text-indigo-300/70 border border-indigo-400/20 rounded-full px-3 py-1.5">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              发言人已标注
+            </span>
+          )}
+          {recState === 'stopped' && hasContent && (
+            <div className="flex items-center gap-2">
+              <select
+                value={batchTargetLang}
+                onChange={e => setBatchTargetLang(e.target.value)}
+                className="bg-white/[0.06] border border-white/10 rounded-lg px-2 py-1 text-xs text-slate-300 outline-none"
+              >
+                {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+              </select>
+              <button
+                onClick={() => batchTranslate(batchTargetLang)}
+                disabled={batchTranslating}
+                className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs bg-white/[0.06] hover:bg-white/[0.09] text-slate-300 border border-white/10 transition-colors"
+              >
+                {batchTranslating
+                  ? <><span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />翻译中…</>
+                  : '全文翻译'}
+              </button>
+            </div>
+          )}
+          {(diarizeStatus === 'uploading' || diarizeStatus === 'transcribing') && (
+            <span className="text-xs text-slate-500 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+              {diarizeStatus === 'uploading' ? '上传音频…' : '识别中…'}
+            </span>
+          )}
+          {diarizeStatus === 'done' && !meetingNotes && (
+            <button
+              onClick={generateNotes}
+              disabled={generatingNotes}
+              className="flex items-center gap-1.5 rounded-full px-4 py-2 text-xs bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 transition-colors"
+            >
+              {generatingNotes ? '生成中…' : '生成纪要'}
+            </button>
+          )}
           {recState === 'stopped' && (
             <input
               value={saveTitle}
               onChange={e => setSaveTitle(e.target.value)}
               placeholder="Session title…"
-              className="w-52 bg-white/[0.05] border border-white/10 rounded-full px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-400/50 placeholder:text-slate-600"
+              className="w-44 bg-white/[0.05] border border-white/10 rounded-full px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-indigo-400/50 placeholder:text-slate-600"
             />
           )}
           {recState === 'stopped' && hasContent && (
@@ -500,8 +726,13 @@ export default function AudioRecorder({
                     ? 'border-white/[0.06] bg-white/[0.02]'
                     : 'border-white/[0.08] bg-white/[0.03]'
                 }`}>
-                  <div className="text-[10px] font-mono text-slate-600 mb-1.5">
-                    {formatTime(seg.startSec)}
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[10px] font-mono text-slate-600">{formatTime(seg.startSec)}</span>
+                    {speakerMap.has(seg.id) && (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${SPEAKER_COLORS[speakerMap.get(seg.id)!] ?? 'bg-white/5 text-slate-400 border-white/10'}`}>
+                        {speakerMap.get(seg.id)}
+                      </span>
+                    )}
                   </div>
 
                   {seg.pending ? (
@@ -581,6 +812,28 @@ export default function AudioRecorder({
 
             <div ref={summaryEndRef} />
           </div>
+
+          {/* ── Meeting Notes ── */}
+          {meetingNotes && (
+            <>
+              <div className="w-px bg-white/[0.06] flex-shrink-0" />
+              <div className="w-80 flex-shrink-0 overflow-y-auto px-5 py-5 scrollbar-thin">
+                <div className="text-[10px] uppercase tracking-[0.22em] text-slate-600 mb-4">会议纪要</div>
+                <div className="rounded-2xl border border-amber-400/15 bg-amber-400/[0.04] px-4 py-4">
+                  <div className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+                    {meetingNotes}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Diarize error */}
+      {diarizeError && (
+        <div className="mx-6 mb-3 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-xs text-red-300">
+          {diarizeError}
         </div>
       )}
     </div>

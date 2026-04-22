@@ -28,10 +28,15 @@ export interface KBConfig {
   ingestionModel?: string
   curationModel?: string
   visionModel?: string
-  asrProvider?: 'openai' | 'aliyun'
+  asrProvider?: 'openai' | 'aliyun' | 'funasr-local'
   asrApiKey?: string
   asrModel?: string
   asrBaseURL?: string
+  diarizeBaseURL?: string
+  ossRegion?: string
+  ossAccessKeyId?: string
+  ossAccessKeySecret?: string
+  ossBucket?: string
   setupCompleted?: boolean
 }
 
@@ -103,6 +108,8 @@ declare global {
       sendMessage: (
         messages: Array<{ role: string; content: string }>
       ) => Promise<{ ok?: boolean; error?: string }>
+      testLLM: () => Promise<{ ok?: boolean; model?: string; latency?: number; reply?: string; error?: string }>
+      testASR: () => Promise<{ ok?: boolean; model?: string; latency?: number; error?: string }>
       onStreamChunk: (cb: (chunk: string) => void) => () => void
       onStreamDone: (cb: (usage: { inputTokens: number; outputTokens: number }) => void) => () => void
       onStreamError: (cb: (error: string) => void) => () => void
@@ -121,6 +128,19 @@ declare global {
         transcribeChunk: (bytes: number[], ext: string) => Promise<{ text?: string; error?: string }>
         translate: (text: string, targetLangCode: string) => Promise<{ text?: string; error?: string }>
         summarize: (segments: string[]) => Promise<{ text?: string; error?: string }>
+        startDashScope: (model: string) => Promise<{ error?: string }>
+        sendAudioFrame: (samples: number[]) => void
+        stopDashScope: () => Promise<void>
+        onDashScopeResult: (cb: (d: { text: string; isFinal: boolean; sentenceId: number; spkLabel?: string }) => void) => () => void
+        onDashScopeError: (cb: (msg: string) => void) => () => void
+        onDashScopeDone: (cb: () => void) => () => void
+        startDiarize: (speakerCount?: number) => Promise<{ taskId?: string; error?: string }>
+        pollDiarize: (taskId: string) => Promise<{
+          status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED'
+          sentences?: Array<{ text: string; begin_time: number; end_time: number; speaker_id: number }>
+          error?: string
+        }>
+        generateNotes: (segments: Array<{ speaker: string; time: number; text: string }>) => Promise<{ text?: string; error?: string }>
       }
     }
   }

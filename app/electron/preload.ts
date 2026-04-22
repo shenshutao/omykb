@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld('omykb', {
   // Agent chat
   sendMessage: (messages: Array<{ role: string; content: string }>) =>
     ipcRenderer.invoke('kb:send-message', messages),
+  testLLM: () => ipcRenderer.invoke('kb:test-llm'),
+  testASR: () => ipcRenderer.invoke('kb:test-asr'),
 
   // Stream events
   onStreamChunk: (cb: (chunk: string) => void) => {
@@ -71,5 +73,33 @@ contextBridge.exposeInMainWorld('omykb', {
       ipcRenderer.invoke('recorder:translate', text, targetLangCode),
     summarize: (segments: string[]) =>
       ipcRenderer.invoke('recorder:summarize', segments),
+    // DashScope real-time streaming
+    startDashScope: (model: string) =>
+      ipcRenderer.invoke('recorder:ds:start', model),
+    sendAudioFrame: (samples: number[]) =>
+      ipcRenderer.send('recorder:ds:audio', samples),
+    stopDashScope: () =>
+      ipcRenderer.invoke('recorder:ds:stop'),
+    onDashScopeResult: (cb: (d: { text: string; isFinal: boolean; sentenceId: number }) => void) => {
+      const h = (_: Electron.IpcRendererEvent, d: { text: string; isFinal: boolean; sentenceId: number }) => cb(d)
+      ipcRenderer.on('recorder:ds:result', h)
+      return () => ipcRenderer.removeListener('recorder:ds:result', h)
+    },
+    onDashScopeError: (cb: (msg: string) => void) => {
+      const h = (_: Electron.IpcRendererEvent, msg: string) => cb(msg)
+      ipcRenderer.on('recorder:ds:error', h)
+      return () => ipcRenderer.removeListener('recorder:ds:error', h)
+    },
+    onDashScopeDone: (cb: () => void) => {
+      const h = () => cb()
+      ipcRenderer.on('recorder:ds:done', h)
+      return () => ipcRenderer.removeListener('recorder:ds:done', h)
+    },
+    startDiarize: (speakerCount?: number) =>
+      ipcRenderer.invoke('recorder:diarize:start', speakerCount),
+    pollDiarize: (taskId: string) =>
+      ipcRenderer.invoke('recorder:diarize:poll', taskId),
+    generateNotes: (segments: Array<{ speaker: string; time: number; text: string }>) =>
+      ipcRenderer.invoke('recorder:generate-notes', segments),
   },
 })
